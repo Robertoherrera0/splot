@@ -1,0 +1,90 @@
+<!-- @(#)welcome.html	3.3  12/13/20  CSS -->
+<!-- "splot" Release 3 -->
+
+<html>
+<head>
+  <link rel="stylesheet" type="text/css" href="css.css">
+</head>
+
+<body>
+<center>
+<p class="welcome">splot</p>
+<div class="version">
+<span class="version">Version: <a href="welcome.html?toggleversion=1">%(version)s</a></span>
+</div>
+<br><br>
+<br><br>
+<div>
+Choose an action:
+<table border="0" width="450">
+<tr>
+  <td width="150" align="center">
+     <figure>
+         <a href="connect.action?spec=toto">
+           <img border="1" src="connect.png" alt="Connect to SPEC">
+         </a>
+         <br>
+        <figcaption>
+         <a href="connect.action">
+           Connect to SPEC
+         </a>
+        </figcaption>
+     </figure>
+  </td>
+  <td width="150" align="center">
+     <figure>
+         <a href="loadfile.action">
+         <img border="1" src="openfile.png" alt="Open File">
+         </a>
+         <br>
+        <figcaption>
+         <a href="loadfile.action">
+           Open Data File
+         </a>
+        </figcaption>
+     </figure>
+  </td>
+  <!-- td width="150" align="center">
+     <figure>
+         <a href="loadimage.action">
+         <img border="1" src="loadimage.png" alt="Load Image">
+         </a>
+         <br>
+        <figcaption>
+         <a href="loadimage.action">
+           Load Image Data
+         </a>
+        </figcaption>
+     </figure>
+  </td -->
+  <td width="150" align="center">
+     <figure>
+        <a href="createnew.action">
+        <img border="1" src="blank.png" alt="Create Blank Graph">
+        </a>
+         <br>
+        <figcaption>
+         <a href="createnew.action">
+           Create Blank Graph
+         </a>
+        </figcaption>
+     </figure>
+  </td>
+</tr>
+</table>
+<br><br>
+<br><br>
+<br><br>
+<div class="content">
+<b>splot</b> is designed to work with the <b>spec</b> instrument
+control and data acquisition software package from
+Certified Scientific Software.
+<br><br>
+See <a href="http://certif.com">certif.com</a> for more information about <b>spec</b>.
+<div class="splotlogo">
+<img align="middle" src="csslogo.png">
+</div>
+</center>
+</body>
+</html>
+

@@ -1,0 +1,81 @@
+#!/bin/bash
+#******************************************************************************
+#
+#  @(#)splot	3.9  09/28/22 CSS
+#
+#  "splot" Release 3
+#
+#  Copyright (c) 2013,2014,2015,2016,2020,2022
+#  by Certified Scientific Software.
+#  All rights reserved.
+#
+#  Permission is hereby granted, free of charge, to any person obtaining a
+#  copy of this software ("splot") and associated documentation files (the
+#  "Software"), to deal in the Software without restriction, including
+#  without limitation the rights to use, copy, modify, merge, publish,
+#  distribute, sublicense, and/or sell copies of the Software, and to
+#  permit persons to whom the Software is furnished to do so, subject to
+#  the following conditions:
+#
+#  The above copyright notice and this permission notice shall be included
+#  in all copies or substantial portions of the Software.
+#
+#  Neither the name of the copyright holder nor the names of its contributors
+#  may be used to endorse or promote products derived from this software
+#  without specific prior written permission.
+#
+#     * The software is provided "as is", without warranty of any   *
+#     * kind, express or implied, including but not limited to the  *
+#     * warranties of merchantability, fitness for a particular     *
+#     * purpose and noninfringement.  In no event shall the authors *
+#     * or copyright holders be liable for any claim, damages or    *
+#     * other liability, whether in an action of contract, tort     *
+#     * or otherwise, arising from, out of or in connection with    *
+#     * the software or the use of other dealings in the software.  *
+#
+#******************************************************************************
+
+PYTHON=
+SPECD=${SPECD:-/usr/local/lib/spec.d}
+SPLOTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+if [ ! -d "$SPECD" ]; then
+    SPECD=$SPLOTDIR/..
+fi
+
+export PYTHONPATH=$PYTHONPATH:$SPECD
+
+export QT_LOGGING_RULES="qt5ct.debug=false"
+
+check_prog() {
+   command -v $1 >/dev/null 2>&1 && echo 1 || echo 0
+}
+
+check_python() {
+   if [ `check_prog $1` = 1 ]
+   then
+       if [ "$($1 -m pyspec.graphics.QVariant check)" = 1 ]; then
+           PYTHON="$1"
+       fi
+   fi
+}
+
+check_python python3
+if [ ! "$PYTHON" ]
+then
+    check_python python2
+fi
+
+if [ ! "$PYTHON" ]
+then
+    check_python python
+fi
+
+if [ ! "$PYTHON" ]
+then
+    echo "python not found or graphics libraries (Qt, matplotlib) not installed. Needed by splot"
+    exit
+fi
+
+exec $PYTHON ${SPECD}/splot/splot.py $*
+

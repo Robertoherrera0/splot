@@ -1,0 +1,97 @@
+/*******************************************************************************
+#
+#  @(#)macos.css	3.2  03/29/21 CSS
+#
+#  "splot" Release 3
+#
+#  Copyright (c) 2021
+#  by Certified Scientific Software.
+#  All rights reserved.
+#
+#  Permission is hereby granted, free of charge, to any person obtaining a
+#  copy of this software ("splot") and associated documentation files (the
+#  "Software"), to deal in the Software without restriction, including
+#  without limitation the rights to use, copy, modify, merge, publish,
+#  distribute, sublicense, and/or sell copies of the Software, and to
+#  permit persons to whom the Software is furnished to do so, subject to
+#  the following conditions:
+#
+#  The above copyright notice and this permission notice shall be included
+#  in all copies or substantial portions of the Software.
+#
+#  Neither the name of the copyright holder nor the names of its contributors
+#  may be used to endorse or promote products derived from this software
+#  without specific prior written permission.
+#
+#     * The software is provided "as is", without warranty of any   *
+#     * kind, express or implied, including but not limited to the  *
+#     * warranties of merchantability, fitness for a particular     *
+#     * purpose and noninfringement.  In no event shall the authors *
+#     * or copyright holders be liable for any claim, damages or    *
+#     * other liability, whether in an action of contract, tort     *
+#     * or otherwise, arising from, out of or in connection with    *
+#     * the software or the use of other dealings in the software.  *
+#
+******************************************************************************/
+
+/* The tab widget frame */
+QTabWidget::pane { 
+    border-top: 2px solid #C2C7CB;
+}
+
+/* move to the right by 5px */
+QTabWidget::tab-bar {
+    left: 2px; 
+}
+
+/* Style the tab using the tab sub-control. Note that
+    it reads QTabBar _not_ QTabWidget */
+QTabBar::tab {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                stop: 0 #E1E1E1, stop: 0.4 #DDDDDD,
+                                stop: 0.5 #D8D8D8, stop: 1.0 #D3D3D3);
+    /* same as the pane color */
+    border: 1px solid #C4C4C3; 
+    /* 
+    border-bottom-color: #C2C7CB; 
+    */
+    border-top-left-radius: 2px;
+    border-top-right-radius: 2px;
+    padding: 2px;
+    min-width: 8ex;
+}
+
+QTabBar::tab:selected, QTabBar::tab:hover {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                stop: 0 #fafafa, stop: 0.4 #f4f4f4,
+                                stop: 0.5 #e7e7e7, stop: 1.0 #fafafa);
+}
+
+QTabBar::tab:selected {
+    border-color: #9B9B9B;
+    border-bottom-color: #C2C7CB; /* same as pane color */
+}
+
+QTabBar::tab:!selected {
+    margin-top: 2px; /* make non-selected tabs look smaller */
+}
+
+#sources::tab-bar {
+   left: 20px;
+}
+
+#sources::tab {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                stop: 0 #E1E1E1, stop: 0.4 #DDDDDD,
+                                stop: 0.5 #D8D8D8, stop: 1.0 #D3D3D3);
+    /* same as the pane color */
+    border: 1px solid #C4C4C3; 
+    /* 
+    border-bottom-color: #C2C7CB; 
+    */
+    border-top-left-radius: 2px;
+    border-top-right-radius: 2px;
+    padding: 2px;
+    min-width: 8ex;
+}
+
