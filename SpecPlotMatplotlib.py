@@ -1215,16 +1215,20 @@ class SpecPlotMatplotlib(QWidget, SpecPlotBaseClass):
             import traceback
             log.log(2, traceback.format_exc())
 
+        
+
         self._setDataStatus()
         self.setAxisTitles()
 
         for name, curve in self.curves.items():
             curve.plot()
 
-        if self.showing_grid:
-            self.canvas.show_grid(True)
-        else:
-            self.canvas.show_grid(False)
+        # if self.showing_grid:
+        #     self.canvas.show_grid(True)
+        # else:
+        #     self.canvas.show_grid(False)
+
+        self.canvas.show_grid(True)
 
         self.canvas.set_xlog(self.xlog)
         self.canvas.set_y1log(self.y1log)
