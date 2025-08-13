@@ -313,7 +313,9 @@ class SpecPlotWidget(QWidget):
 
         toolLayout.addWidget(self.toolbar)
         topLayout.addWidget(spacer)
-        topLayout.addWidget(self.plotHeader, 2, Qt.AlignLeft)
+        # topLayout.addWidget(self.plotHeader, 2, Qt.AlignLeft)
+        topLayout.addWidget(self.plotHeader, 0, Qt.AlignHCenter)
+
 
         if haveFeature("2D"):
             topLayout.addWidget(self.mode2d_widget, 1, Qt.AlignRight | Qt.AlignBottom)
