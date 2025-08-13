@@ -44,7 +44,8 @@ import glob
 from QVariant import QIcon
 
 _basedir = os.path.dirname(__file__)
-_extensions = ["*png", "*jpg"]
+# added svg support 
+_extensions = ["*png", "*jpg", "*svg"]
 
 _icond = {}
 
