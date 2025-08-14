@@ -176,7 +176,7 @@ class SpecDataSource(DataSource1D):
         self.topLayout.setSpacing(3)
         self.topLayout.setContentsMargins(0, 0, 0, 0)
 
-        self.specLabel = QLabel("spec:")
+        self.specLabel = QLabel("SPEC:")
         self.specValue = QLabel("")
         self.specValue.setObjectName("specname")
 
@@ -189,7 +189,6 @@ class SpecDataSource(DataSource1D):
         self.statusLabel = QLabel("Status:")
         self.statusValue = QLabel("")
         self.statusValue.setObjectName("readystatus")
-
 
         self.topLayout.addWidget(self.specLabel, 0, 0)
         self.topLayout.addWidget(self.specValue, 0, 1)
@@ -289,7 +288,7 @@ class SpecDataSource(DataSource1D):
         self.style().polish(self)
 
     def statusDisconnected(self):
-        self.statusValue.setText("GANS: Disconnected")
+        self.statusValue.setText("Disconnected")
         self.statusValue.setStyleSheet("""
             font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
             font-size: 10pt;
@@ -301,10 +300,9 @@ class SpecDataSource(DataSource1D):
 
         self.plot_w.setServerStatus(STATUS_OFF)
 
-
     def statusConnected(self):
         if self.status == 1:
-            self.statusValue.setText("GANS: Ready")
+            self.statusValue.setText("Ready")
             self.statusValue.setStyleSheet("""
                 font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
                 font-size: 10pt;
@@ -315,7 +313,7 @@ class SpecDataSource(DataSource1D):
             """)
             self.serverPanel.setBusy(False)
         else:
-            self.statusValue.setText("GANS: Busy")
+            self.statusValue.setText("Busy")
             self.statusValue.setStyleSheet("""
                 font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
                 font-size: 10pt;

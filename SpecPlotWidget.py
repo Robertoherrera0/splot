@@ -541,7 +541,7 @@ class SpecPlotWidget(QWidget):
         if not self.server_mode:
             return
 
-        self.serverStateLabel.setText("GANS: Ready")
+        self.serverStateLabel.setText("GANS: Ready ")
 
         self.serverStateLabel.setStyleSheet("""
             font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
@@ -559,7 +559,7 @@ class SpecPlotWidget(QWidget):
         if not self.server_mode:
             return
 
-        self.serverStateLabel.setText("GANS: Busy")
+        self.serverStateLabel.setText("GANS: Busy ")
         self.serverStateLabel.setStyleSheet("""
             font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
             font-size: 10pt;
@@ -576,7 +576,7 @@ class SpecPlotWidget(QWidget):
         if not self.server_mode:
             return
 
-        self.serverStateLabel.setText("GANS: Disconnected")
+        self.serverStateLabel.setText("GANS: Disconnected ")
         self.serverStateLabel.setStyleSheet("""
             font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
             font-size: 10pt;
