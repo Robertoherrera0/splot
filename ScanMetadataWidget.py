@@ -40,6 +40,7 @@ import time
 from pyspec.graphics.QVariant import *
 from pyspec.css_logger import log
 
+from ScanLive import LiveScanTable
 import icons
 
 class ScanMetadataWidget(QWidget):
@@ -97,6 +98,12 @@ class ScanMetadataWidget(QWidget):
         self.motorArea.setWidgetResizable(True)
         self.motorArea.setAlignment(Qt.AlignHCenter)
 
+        # self.liveArea = QScrollArea()
+        # self.liveView = LiveScanTable(self)
+        # self.liveArea.setWidget(self.liveView)
+        # self.liveArea.setWidgetResizable(True)
+        # self.liveArea.setAlignment(Qt.AlignHCenter)
+
         self.commentsArea = QTextBrowser()
 
         self.messageArea = QScrollArea()
@@ -120,6 +127,7 @@ class ScanMetadataWidget(QWidget):
         self.moreArea.setAlignment(Qt.AlignHCenter)
 
         self.infoTabs.addTab(self.motorArea, "Motors")
+        # self.infoTabs.addTab(self.liveArea, "Current Scan")
         self.infoTabs.addTab(self.commentsArea, "Comments")
         self.infoTabs.addTab(self.messageArea, "Messages")
         self.infoTabs.addTab(self.moreArea, "More...")
@@ -175,6 +183,12 @@ class ScanMetadataWidget(QWidget):
         self.setComments(None)
         self.setMessages(None)
         self.setMore(None)
+
+    def set_connection(self, conn):
+        # call this from outside when you have a SpecConnection
+        if hasattr(self, "liveView") and hasattr(self.liveView, "set_connection"):
+            self.liveView.set_connection(conn)
+
 
     def setMetadata(self, data):
 

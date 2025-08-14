@@ -228,7 +228,7 @@ class SplotTabWidget(QTabWidget):
                 padding: 4px;
             }
             QTabBar::close-button {
-                image: url(icons/close.svg);
+                image: url(/usr/local/lib/spec.d/splot/icons/close.svg);
                 subcontrol-position: right;
                 margin-left: 6px;
             }
