@@ -1,435 +1,300 @@
-#******************************************************************************
-#
-#  @(#)PlotHeader.py	3.8  01/15/22 CSS
-#
-#  "splot" Release 3
-#
-#  Copyright (c) 2013,2014,2015,2016,2017,2020,2021,2022
-#  by Certified Scientific Software.
-#  All rights reserved.
-#
-#  Permission is hereby granted, free of charge, to any person obtaining a
-#  copy of this software ("splot") and associated documentation files (the
-#  "Software"), to deal in the Software without restriction, including
-#  without limitation the rights to use, copy, modify, merge, publish,
-#  distribute, sublicense, and/or sell copies of the Software, and to
-#  permit persons to whom the Software is furnished to do so, subject to
-#  the following conditions:
-#
-#  The above copyright notice and this permission notice shall be included
-#  in all copies or substantial portions of the Software.
-#
-#  Neither the name of the copyright holder nor the names of its contributors
-#  may be used to endorse or promote products derived from this software
-#  without specific prior written permission.
-#
-#     * The software is provided "as is", without warranty of any   *
-#     * kind, express or implied, including but not limited to the  *
-#     * warranties of merchantability, fitness for a particular     *
-#     * purpose and noninfringement.  In no event shall the authors *
-#     * or copyright holders be liable for any claim, damages or    *
-#     * other liability, whether in an action of contract, tort     *
-#     * or otherwise, arising from, out of or in connection with    *
-#     * the software or the use of other dealings in the software.  *
-#
-#******************************************************************************
+# PlotHeader.py — two-tier centered header with detector dropdown
 
-
-import sys
-import copy
-import re
-
+import re, copy
 from pyspec.graphics.QVariant import (
-    QWidget, Qt,
-    QHBoxLayout, QVBoxLayout,
-    QLabel, QComboBox, QFrame,
-    QApplication, QMainWindow,
+    QWidget, Qt, QHBoxLayout, QVBoxLayout, QLabel, QFrame, QComboBox,
+    QApplication, QMainWindow
 )
-from pyspec.css_logger import log
-from Constants import *
-
 from Preferences import Preferences
+from Constants import *
 import themes
 
 
-class HKLWidget(QWidget):
-    def __init__(self, *args):
-        QWidget.__init__(self, *args)
+def _font(w, size=10, bold=False):
+    f = w.font()
+    f.setFamily("IBM Plex Sans")
+    f.setPointSize(size)
+    f.setBold(bold)
+    w.setFont(f)
 
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
-        self.setLayout(layout)
 
-        self.hkl_label = QLabel("HKL:")
-        self.hkl_label.setFixedWidth(42)
+class Token(QWidget):
+    def __init__(self, key, color="#1E1E1E"):
+        super().__init__()
+        lo = QHBoxLayout(self)
+        lo.setContentsMargins(8, 2, 8, 2)
+        lo.setSpacing(6)
+        self.k = QLabel(key)
+        self.v = QLabel("")
+        _font(self.k, 10, False)
+        _font(self.v, 10, False)
+        self.k.setStyleSheet("color:#667085;")
+        self.v.setStyleSheet(f"color:{color};")
+        lo.addWidget(self.k)
+        lo.addWidget(self.v)
 
-        self.hkl_value = QLabel()
-        self.hkl_value.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.hkl_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
-
-        layout.addWidget(self.hkl_label)
-        layout.addWidget(self.hkl_value)
-
-        font = self.hkl_label.font()
-        font.setFamily("IBM Plex Sans")
-        font.setPointSize(10)
-        font.setBold(True)
-        self.hkl_label.setFont(font)
-
-        vfont = self.hkl_value.font()
-        vfont.setFamily("IBM Plex Sans")
-        vfont.setPointSize(10)
-        self.hkl_value.setFont(vfont)
-
-    def set_value(self, value):
-        self.hkl = value
-        if value is not None:
-            self.hkl_value.setText(value)
-        else:
-            self.hkl_value.setText("")
+    def set_value(self, text):
+        self.v.setText(text)
 
 
 class PlotHeader(QWidget):
-
     def __init__(self, *args):
-
-        # Init data
-        self.dataBlock = None
-        self.title = ""
-        self.columns = None
-        self.selected_column = None
-
-        self.stats_text = ""
-        self.hkl_text = ""
-
-        self.prefs = Preferences()
-
         QWidget.__init__(self, *args)
 
-        # === Outer container (matches your panel style) ===
-        self.outer_frame = QFrame()
-        self.outer_frame.setObjectName("PlotHeaderFrame")
-        self.outer_frame.setStyleSheet("""
-            QFrame#PlotHeaderFrame {
-                border: 1px solid #dcdfe3;
-                border-radius: 6px;
-                background: #ffffff;
-            }
-            QLabel {
-                font-family: 'IBM Plex Sans';
-                font-size: 10pt;
-                color: #1e1e1e;
-            }
-            QComboBox {
-                font-family: 'IBM Plex Sans';
-                font-size: 10pt;
-            }
-        """)
+        self.dataBlock = None
+        self.title = ""
+        self.hkl_text = ""
+        self.stats_text = ""
+        self.columns = []
+        self.selected_column = None
+        self.prefs = Preferences()
 
-        wrapper = QVBoxLayout(self)
-        wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(self.outer_frame)
+        theme = themes.get_theme(self.prefs["theme"]) or object()
+        peak_c = getattr(theme, "marker_color_peak", "#1E1E1E")
+        com_c  = getattr(theme, "marker_color_com",  "#1E1E1E")
+        fwhm_c = getattr(theme, "marker_color_fwhm", "#1E1E1E")
 
-        outer_layout = QVBoxLayout(self.outer_frame)
-        outer_layout.setContentsMargins(8, 6, 8, 6)
-        outer_layout.setSpacing(4)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(4)
 
-        # --- Row 1: Scan row (Scan: <num> | <cmd>) ---
-        self.row1 = QHBoxLayout()
-        self.row1.setContentsMargins(0, 0, 0, 0)
-        self.row1.setSpacing(8)
+        # Top row (centered): scan number | command (10pt, same as tokens)
+        self.top_num = QLabel("")
+        self.top_sep = QLabel("|")
+        self.top_cmd = QLabel("")
+        _font(self.top_num, 10, False)
+        _font(self.top_sep, 10, False)
+        _font(self.top_cmd, 10, False)
+        self.top_cmd.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
-        self.scan_label = QLabel("Scan:")
-        sfont = self.scan_label.font()
-        sfont.setFamily("IBM Plex Sans")
-        sfont.setPointSize(10)
-        sfont.setBold(True)
-        self.scan_label.setFont(sfont)
+        top_row = QHBoxLayout()
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setSpacing(6)
+        top_row.addStretch(1)
+        top_row.addWidget(self.top_num, 0, Qt.AlignCenter)
+        top_row.addWidget(self.top_sep, 0, Qt.AlignCenter)
+        top_row.addWidget(self.top_cmd, 0, Qt.AlignCenter)
+        top_row.addStretch(1)
+        root.addLayout(top_row)
 
-        self.scan_number = QLabel("")
-        nfont = self.scan_number.font()
-        nfont.setFamily("IBM Plex Sans")
-        nfont.setPointSize(10)
-        nfont.setBold(True)
-        self.scan_number.setFont(nfont)
-        self.scan_number.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        # Horizontal divider
+        hline = QFrame()
+        hline.setFrameShape(QFrame.HLine)
+        hline.setStyleSheet("color:#ECEEF0;")
+        root.addWidget(hline)
 
-        self.scan_sep = QLabel("|")
-        self.scan_sep.setFont(nfont)
+        # Bottom row (centered):  HKL block | vline | stats block … [detector combo]
+        self.t_hkl  = Token("HKL")
+        self.t_peak = Token("Peak", peak_c)
+        self.t_com  = Token("COM",  com_c)
+        self.t_fwhm = Token("FWHM", fwhm_c)
 
-        self.scan_command = QLabel("")
-        cfont = self.scan_command.font()
-        cfont.setFamily("IBM Plex Sans")
-        cfont.setPointSize(10)
-        self.scan_command.setFont(cfont)
-        self.scan_command.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.left_block = QHBoxLayout()
+        self.left_block.setContentsMargins(0, 0, 0, 0)
+        self.left_block.setSpacing(10)
+        self.left_block.addWidget(self.t_hkl)
 
-        self.row1.addWidget(self.scan_label)
-        self.row1.addWidget(self.scan_number)
-        self.row1.addWidget(self.scan_sep)
-        self.row1.addWidget(self.scan_command, 1, Qt.AlignLeft)
+        self.right_block = QHBoxLayout()
+        self.right_block.setContentsMargins(0, 0, 0, 0)
+        self.right_block.setSpacing(10)
+        self.right_block.addWidget(self.t_peak)
+        self.right_block.addWidget(self.t_com)
+        self.right_block.addWidget(self.t_fwhm)
 
-        # --- Separator line ---
-        self.sep1 = QFrame()
-        self.sep1.setFrameShape(QFrame.HLine)
-        self.sep1.setFrameShadow(QFrame.Plain)
-        self.sep1.setStyleSheet("color: #e6e8eb;")
+        self.vline = QFrame()
+        self.vline.setFrameShape(QFrame.VLine)
+        self.vline.setStyleSheet("color:#ECEEF0;")
 
-        # --- Row 2: HKL row ---
-        self.hkl_widget = HKLWidget()
-        self.hkl_widget.hide()
-
-        # --- Separator line ---
-        self.sep2 = QFrame()
-        self.sep2.setFrameShape(QFrame.HLine)
-        self.sep2.setFrameShadow(QFrame.Plain)
-        self.sep2.setStyleSheet("color: #e6e8eb;")
-
-        # --- Row 3: Detector stats row ---
-        self.statsLayout = QHBoxLayout()
-        self.statsLayout.setContentsMargins(0, 0, 0, 0)
-        self.statsLayout.setSpacing(10)
-        self.statsLayout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-
-        self.detector_label = QLabel("Detector:")
-        dfont = self.detector_label.font()
-        dfont.setFamily("IBM Plex Sans")
-        dfont.setPointSize(10)
-        dfont.setBold(True)
-        self.detector_label.setFont(dfont)
-
+        # Detector dropdown (appears only when >1 Y columns)
         self.columnCombo = QComboBox()
-        self.columnLabel = QLabel("")
-        self.columnCombo.currentIndexChanged.connect(self._columnSelectionChanged)
+        _font(self.columnCombo, 10, False)
+        self.columnCombo.hide()
+        self.columnCombo.currentIndexChanged.connect(self._column_changed)
 
-        spacer = QLabel()
-        spacer.setFixedWidth(6)
+        bottom_row = QHBoxLayout()
+        bottom_row.setContentsMargins(0, 0, 0, 0)
+        bottom_row.setSpacing(12)
+        bottom_row.addStretch(1)
+        bottom_row.addLayout(self.left_block)
+        bottom_row.addWidget(self.vline)
+        bottom_row.addLayout(self.right_block)
+        bottom_row.addSpacing(8)
+        bottom_row.addWidget(self.columnCombo)
+        bottom_row.addStretch(1)
+        root.addLayout(bottom_row)
 
-        self.peakLabel = QLabel("")
-        self.comLabel = QLabel("")
-        self.fwhmLabel = QLabel("")
-        self.resultLabel = QLabel("")
+        # Initial visibility
+        self.t_hkl.hide()
+        self.t_peak.hide()
+        self.t_com.hide()
+        self.t_fwhm.hide()
+        self._update_vdivider()
 
-        for lbl in [self.peakLabel, self.comLabel, self.fwhmLabel, self.resultLabel,
-                    self.columnLabel]:
-            f = lbl.font()
-            f.setFamily("IBM Plex Sans")
-            f.setPointSize(10)
-            lbl.setFont(f)
-            lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
-
-        self.columnLabel.setStyleSheet("QLabel { font-weight: bold; }")
-
-        self.applyTheme()
-
-        # Assemble rows
-        outer_layout.addLayout(self.row1)
-        outer_layout.addWidget(self.sep1)
-        outer_layout.addWidget(self.hkl_widget)
-        outer_layout.addWidget(self.sep2)
-        self.statsLayout.addWidget(self.detector_label)
-        self.statsLayout.addWidget(self.columnCombo)
-        # self.statsLayout.addWidget(self.columnLabel)
-        self.statsLayout.addWidget(spacer)
-        self.statsLayout.addWidget(self.peakLabel)
-        self.statsLayout.addWidget(self.comLabel)
-        self.statsLayout.addWidget(self.fwhmLabel)
-        self.statsLayout.addWidget(self.resultLabel, 1, Qt.AlignLeft)
-        outer_layout.addLayout(self.statsLayout)
-
-    def _parse_scan_title(self, title):
-        m = re.match(r"\s*Scan\s+(\d+)\s*-\s*(.*)$", title)
-        if m:
-            return m.group(1), m.group(2)
-        return None, title
-
-    def setTitle(self, title):
-        self.title = title
-
-        num, rest = self._parse_scan_title(title)
-        if num is None:
-            self.scan_number.setText("")
-            self.scan_sep.setText("")
-            self.scan_command.setText(title)
-        else:
-            self.scan_number.setText(num)
-            self.scan_sep.setText("|")
-            self.scan_command.setText(rest.strip())
-
-        hkl_value = self.dataBlock.getMetaData("HKL")
-        if hkl_value:
-            val = "   ".join(["%g" % val for val in map(float, hkl_value.split())])
-            self.hkl_widget.set_value(val)
-            self.hkl_widget.show()
-            self.hkl_text = "HKL: " + val
-        else:
-            self.hkl_widget.hide()
-            self.hkl_text = ""
-
-        log.log(2, "NEW SCAN - HKL value for header is: %s\n" % str(hkl_value))
-
-    def applyTheme(self):
-        self.theme = themes.get_theme(self.prefs["theme"])
-        if self.theme:
-            try:
-                self.peakLabel.setStyleSheet(
-                    "QLabel { font-weight: bold; color: %s; }" % self.theme.marker_color_peak
-                )
-                self.comLabel.setStyleSheet(
-                    "QLabel { font-weight: bold; color: %s; }" % self.theme.marker_color_com
-                )
-                self.fwhmLabel.setStyleSheet(
-                    "QLabel { font-weight: bold; color: %s; }" % self.theme.marker_color_fwhm
-                )
-            except:
-                pass
-
-    def getTitle(self):
-        ret_str = self.title
-        if self.hkl_text != "":
-            ret_str += "\n" + self.hkl_text
-        if self.stats_text != "":
-            ret_str += "\n" + self.stats_text
-        return ret_str
-
-    def getSelectedColumn(self):
-        return self.selected_column
-
-    def setStatistics(self, stats):
-        self._updateStats(stats)
-
+    # ===== SPEC hooks =====
     def setDataBlock(self, datablock):
         if not datablock:
             return
-
         if self.dataBlock and (self.dataBlock is not datablock):
             self.dataBlock.unsubscribe(self)
-
         self.dataBlock = datablock
         self.dataBlock.subscribe(self, STATS_UPDATED, self._updateStats)
         self.dataBlock.subscribe(self, Y_SELECTION_CHANGED, self._updateColumns)
         self.dataBlock.subscribe(self, TITLE_CHANGED, self.setTitle)
 
+    def setStatistics(self, stats):
+        self._updateStats(stats)
+
+    def getSelectedColumn(self):
+        return self.selected_column
+
+    def selectColumn(self, column):
+        if not self.columns:
+            return
+        self._selectColumn(column)
+        if column in self.columns:
+            self.columnCombo.setCurrentIndex(self.columns.index(column))
+
+    def getTitle(self):
+        ret = self.title
+        if self.hkl_text:
+            ret += "\n" + self.hkl_text
+        if self.stats_text:
+            ret += "\n" + self.stats_text
+        return ret
+
+    # ===== Internals =====
+    def _parse_title(self, title):
+        m = re.match(r"\s*Scan\s+(\d+)\s*-\s*(.*)$", title)
+        return (m.group(1), m.group(2)) if m else ("", title)
+
+    def setTitle(self, title):
+        self.title = title
+        num, cmd = self._parse_title(title)
+        self.top_num.setText(num)
+        self._set_cmd(cmd)
+
+        hkl_value = self.dataBlock.getMetaData("HKL") if self.dataBlock else None
+        if hkl_value:
+            vals = "   ".join(["%g" % v for v in map(float, hkl_value.split())])
+            self.t_hkl.set_value(vals)
+            self.t_hkl.show()
+            self.hkl_text = f"HKL: {vals}"
+        else:
+            self.t_hkl.hide()
+            self.hkl_text = ""
+
+        self._update_vdivider()
+        self._elide_top_cmd()
+
     def _updateColumns(self, columns):
+        # Called when Y selection changes; show combo if multiple columns.
+        columns = columns or []
         if columns == self.columns:
             return
         self.columns = copy.copy(columns)
-        self._update()
-
-    def _updateStats(self, newstats):
-        if not newstats:
-            self.showResultLabel("")
-            return
-
-        data_2d = newstats.get("2d", False)
-
-        if data_2d:
-            self.theme = themes.get_theme(self.prefs["theme"])
-            if self.theme is not None:
-                try:
-                    newstats['maxcolor'] = self.theme.marker_color_peak
-                    newstats['poscolor'] = self.theme.marker_color_com
-                    newstats['sumcolor'] = self.theme.marker_color_fwhm
-                except:
-                    pass
-
-            txt = "<font color='%(sumcolor)s'><b>Sum = %(sum).2g. </b></font>" % newstats
-            try:
-                txt += (
-                    "<b><font color='%(maxcolor)s'>Max value: %(peak).4g</font> "
-                    "at %(xcolumn)s=%(peak_x).3g / %(ycolumn)s=%(peak_y).3g</b>"
-                ) % newstats
-            except:
-                import traceback
-                log.log(2, traceback.format_exc())
-                pass
-
-            self.showResultLabel(txt)
-            self.stats_text = self.selected_column + txt
-
-        elif newstats['column'] == self.selected_column:
-            self.hideResultLabel()
-
-            peakpos = newstats['peak'][0]
-            peakval = newstats['peak'][1]
-            fwhmval = newstats['fwhm'][0]
-            fwhmpos = newstats['fwhm'][1]
-            compos = newstats['com']
-
-            # columntxt = "%s: " % self.selected_column
-            peaktxt = " Peak at %.5g is %.5g. " % (peakpos, peakval)
-            comtxt = "COM at %.5g. " % compos
-            fwhmtxt = "FWHM is %.5g at %.5g. " % (fwhmval, fwhmpos)
-
-            self.columnLabel.setText(self.selected_column)
-            self.peakLabel.setText(peaktxt)
-            self.comLabel.setText(comtxt)
-            self.fwhmLabel.setText(fwhmtxt)
-
-            self.stats_text = self.selected_column + ": " + peaktxt + comtxt + fwhmtxt
-
-    def showResultLabel(self, txt):
-        self.peakLabel.hide()
-        self.comLabel.hide()
-        self.fwhmLabel.hide()
-        self.resultLabel.show()
-        self.resultLabel.setText(txt)
-
-    def hideResultLabel(self):
-        self.peakLabel.show()
-        self.comLabel.show()
-        self.fwhmLabel.show()
-        self.resultLabel.hide()
-
-    def _update(self):
-        nb_columns = len(self.columns)
-
-        # Always hide label and combo
-        self.columnLabel.hide()
-        self.columnCombo.hide()
-
-        # Optional: keep logic for multiple columns if you still want selection later
-        if nb_columns > 1:
-            self.columnCombo.show()
-            self.columnCombo.clear()
+        self.columnCombo.clear()
+        if len(self.columns) > 1:
             self.columnCombo.addItems(self.columns)
-
-        if self.selected_column not in self.columns and nb_columns:
-            self._selectColumn(self.columns[0])
-
-    def selectColumn(self, column):
-        if self.columns is None:
-            return
-
-        self._selectColumn(column)
-
-        if self.selected_column not in self.columns:
-            return
-
-        active_idx = self.columns.index(self.selected_column)
-        self.columnCombo.setCurrentIndex(active_idx)
+            self.columnCombo.show()
+            # Keep or set a valid selection
+            if self.selected_column not in self.columns:
+                self._selectColumn(self.columns[0])
+            # Reflect in combo box
+            try:
+                self.columnCombo.setCurrentIndex(self.columns.index(self.selected_column))
+            except Exception:
+                pass
+        else:
+            self.columnCombo.hide()
+            if self.columns:
+                self._selectColumn(self.columns[0])
 
     def _selectColumn(self, column):
         self.selected_column = column
-        if self.selected_column in self.columns:
+        if self.dataBlock and column in (self.columns or []):
             self.dataBlock.setActiveColumn(column)
 
-    def _columnSelectionChanged(self, idx):
-        self.selectColumn(self.columns[idx])
+    def _column_changed(self, idx):
+        if 0 <= idx < len(self.columns):
+            self.selectColumn(self.columns[idx])
+
+    def _updateStats(self, s):
+        # Hide all tokens by default; show only available
+        self.t_peak.hide()
+        self.t_com.hide()
+        self.t_fwhm.hide()
+        self.stats_text = ""
+
+        if not s:
+            self._update_vdivider()
+            return
+
+        if s.get("2d", False):
+            # 2D mode: show Max and Sum
+            peak_val = s.get("peak", "")
+            if isinstance(peak_val, (int, float)):
+                self.t_peak.k.setText("Max")
+                self.t_peak.set_value(f"{peak_val:.4g}")
+                self.t_peak.show()
+            if "sum" in s:
+                self.t_fwhm.k.setText("Sum")
+                self.t_fwhm.set_value(f"{s['sum']:.2g}")
+                self.t_fwhm.show()
+            self.stats_text = f"2D: max {peak_val}; sum {s.get('sum','')}"
+            self._update_vdivider()
+            return
+
+        if s.get("column") != self.selected_column:
+            self._update_vdivider()
+            return
+
+        pk_pos, pk_val = s['peak'][0], s['peak'][1]
+        fw, fw_pos     = s['fwhm'][0], s['fwhm'][1]
+        com            = s['com']
+
+        self.t_peak.k.setText("Peak"); self.t_peak.set_value(f"{pk_val:.5g} @ {pk_pos:.5g}"); self.t_peak.show()
+        self.t_com.k.setText("COM");   self.t_com.set_value(f"{com:.5g}");                      self.t_com.show()
+        self.t_fwhm.k.setText("FWHM"); self.t_fwhm.set_value(f"{fw:.5g} @ {fw_pos:.5g}");       self.t_fwhm.show()
+
+        self.stats_text = f"{self.selected_column}: peak {pk_val:.5g}@{pk_pos:.5g}; COM {com:.5g}; FWHM {fw:.5g}@{fw_pos:.5g}"
+        self._update_vdivider()
+
+    def _update_vdivider(self):
+        left_visible  = self.t_hkl.isVisible()
+        right_visible = any(w.isVisible() for w in (self.t_peak, self.t_com, self.t_fwhm))
+        self.vline.setVisible(left_visible and right_visible)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._elide_top_cmd()
+
+    def _set_cmd(self, raw):
+        self.top_cmd.setProperty("_raw", raw)
+        self.top_cmd.setText(raw)
+
+    def _elide_top_cmd(self):
+        raw = self.top_cmd.property("_raw") or self.top_cmd.text()
+        fm = self.top_cmd.fontMetrics()
+        outer_w = max(0, self.width() - 40)
+        num_w = self.top_num.sizeHint().width()
+        sep_w = self.top_sep.sizeHint().width()
+        max_cmd_w = max(60, int(0.9 * outer_w) - num_w - sep_w)
+        elided = fm.elidedText(raw, Qt.ElideMiddle, max_cmd_w)
+        self.top_cmd.setText(elided)
 
 
-# Local test harness (optional)
-def test():
+# Local test harness
+if __name__ == "__main__":
     app = QApplication([])
-    win = QMainWindow()
-    titlestats = PlotHeader()
-    titlestats.setTitle("Scan 100 - ascan th 3 4 3 2")
-    win.setCentralWidget(titlestats)
-    win.resize(700, 130)
-    win.show()
-    sys.exit(app.exec_())
-
-
-if __name__ == '__main__':
-    test()
+    w = QMainWindow()
+    ph = PlotHeader()
+    ph.setTitle("Scan 154 - a2scan mch 1 1 Pth 1 3 10 1 with a very long command that should elide in the middle")
+    # Simulate columns arriving
+    ph._updateColumns(["det", "mon", "sec"])
+    # Simulate stats
+    ph._updateStats({'column': 'det', '2d': False, 'peak': (1.23456, 789.01), 'fwhm': (0.012345, 0.98765), 'com': 1.00001})
+    ph.t_hkl.show(); ph.t_hkl.set_value("0.0836   0.0506   0.0000")
+    w.setCentralWidget(ph)
+    w.resize(900, 88)
+    w.show()
+    app.exec()

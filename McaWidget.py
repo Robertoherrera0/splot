@@ -106,7 +106,7 @@ class McaWidget(QWidget):
 
         self.toolbar.addSeparator()
 
-        self.zoom_action = self.toolbar.addAction(icons.get_icon('zoom'), "Zoom", self.set_zoom_mode)
+        self.zoom_action = self.toolbar.addAction(icons.get_icon('zoom'), "Zoom Out", self.set_zoom_mode)
         self.zoom_action.setCheckable(True)
         self.zoom_action.setEnabled(True)
 

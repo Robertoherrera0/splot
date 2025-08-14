@@ -1301,11 +1301,12 @@ class SpecPlotBaseClass(object):
             self.hideStats()
             return
 
-        if not newstats:
+        if not newstats or not isinstance(newstats, dict):
             self.hideStats(temporary=True)
-        else:
-            if self.showing_stats and self.stats_hidden:
-                self.showStats()
+            return
+
+        if self.showing_stats and self.stats_hidden:
+            self.showStats()
 
         column = newstats.get('column',None)
         stats_2d = newstats.get('2d', False)

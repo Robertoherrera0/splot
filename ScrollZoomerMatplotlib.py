@@ -59,6 +59,14 @@ class ScrollZoomer(object):
         self.y1_beg0 = self.y1_end0 = None
         self.y2_beg0 = self.y2_end0 = None
 
+        # in __init__
+        self.x_beg = None
+        self.y_beg = None
+        self.x_end = None
+        self.y_end = None
+        self._selecting = False
+
+
     def setEnabled(self, flag):
         self.enabled = flag
 
@@ -67,6 +75,7 @@ class ScrollZoomer(object):
             self.selecting = True
             canvas = self.plot_ref().canvas
             self.x_beg, self.y1_beg = canvas.pixelsToXY(event.x, event.y)
+            self.x_end, self.y1_end = self.x_beg, self.y1_beg
             if self.last_rect:
                 self.last_rect.remove()
                 self.last_rect = None

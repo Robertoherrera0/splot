@@ -289,22 +289,43 @@ class SpecDataSource(DataSource1D):
         self.style().polish(self)
 
     def statusDisconnected(self):
-        self.statusValue.setText("OFF")
-        self.statusValue.setStyleSheet("background-color: #ccc;color: white;")
+        self.statusValue.setText("GANS: Disconnected")
+        self.statusValue.setStyleSheet("""
+            font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
+            font-size: 10pt;
+            font-weight: 500;
+            color: #9e9e9e;  /* grey text */
+            background-color: transparent;
+            border: none;
+        """)
 
         self.plot_w.setServerStatus(STATUS_OFF)
 
+
     def statusConnected(self):
         if self.status == 1:
-            self.statusValue.setText("READY")
-            self.statusValue.setStyleSheet(
-                "background-color: #cfc;color: black;")
+            self.statusValue.setText("GANS: Ready")
+            self.statusValue.setStyleSheet("""
+                font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
+                font-size: 10pt;
+                font-weight: 500;
+                color: #2e7d32;  /* green text */
+                background-color: transparent;
+                border: none;
+            """)
             self.serverPanel.setBusy(False)
         else:
-            self.statusValue.setText("BUSY")
-            self.statusValue.setStyleSheet(
-                "background-color: yellow;color: black;")
+            self.statusValue.setText("GANS: Busy")
+            self.statusValue.setStyleSheet("""
+                font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
+                font-size: 10pt;
+                font-weight: 500;
+                color: #ff9800;  /* amber/orange text */
+                background-color: transparent;
+                border: none;
+            """)
             self.serverPanel.setBusy(True)
+
 
     # shm
     def checkData(self):
@@ -400,7 +421,7 @@ class SpecDataSource(DataSource1D):
 
     # server
     def showServerPanel(self):
-        self.tabs.addTab(self.serverPanel, "Server")
+        self.tabs.addTab(self.serverPanel, "Command Server")
         self.serverPanel.setDataSource(weakref.ref(self))
         self.serverPanel.setDataBlock(self.datablock)
 

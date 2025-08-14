@@ -184,7 +184,7 @@ class SpecPlotWidget(QWidget):
         self.regionOutAction.setCheckable(False)
         self.regionOutAction.setEnabled(False)
 
-        self.zoomModeAction = QAction(icons.get_icon('zoom'), "Zoom", self)
+        self.zoomModeAction = QAction(icons.get_icon('zoom'), "Zoom Out", self)
         self.zoomModeAction.triggered.connect(self.zoomMode)
         self.zoomModeAction.setCheckable(True)
 
@@ -541,11 +541,16 @@ class SpecPlotWidget(QWidget):
         if not self.server_mode:
             return
 
-        self.serverStateLabel.setText("READY")
+        self.serverStateLabel.setText("GANS: Ready")
 
-        self.serverStateLabel.setStyleSheet(
-            "background-color: #cfc;color: black;")
-
+        self.serverStateLabel.setStyleSheet("""
+            font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
+            font-size: 10pt;
+            font-weight: 500;
+            color: #2e7d32;  /* green text */
+            background-color: transparent;
+            border: none;
+        """)
         self.abortButton.setIcon(self.abortGreyIcon)
         self.abortButton.setText("")
         self.abortButton.setEnabled(False)
@@ -554,22 +559,32 @@ class SpecPlotWidget(QWidget):
         if not self.server_mode:
             return
 
-        self.serverStateLabel.setText("BUSY")
-        self.serverStateLabel.setStyleSheet(
-            "background-color: yellow; color: black;")
-
+        self.serverStateLabel.setText("GANS: Busy")
+        self.serverStateLabel.setStyleSheet("""
+            font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
+            font-size: 10pt;
+            font-weight: 500;
+            color: #ff9800;  /* amber/orange text */
+            background-color: transparent;
+            border: none;
+        """)
         self.abortButton.setIcon(self.abortActiveIcon)
-        self.abortButton.setText("STOP")
+        self.abortButton.setText("Abort")
         self.abortButton.setEnabled(True)
 
     def setDisconnected(self):
         if not self.server_mode:
             return
 
-        self.serverStateLabel.setText("OFF")
-        self.serverStateLabel.setStyleSheet(
-            "background-color: #ccc;color: white;")
-
+        self.serverStateLabel.setText("GANS: Disconnected")
+        self.serverStateLabel.setStyleSheet("""
+            font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
+            font-size: 10pt;
+            font-weight: 500;
+            color: #9e9e9e;  /* grey text */
+            background-color: transparent;
+            border: none;
+        """)
         self.abortButton.setIcon(self.abortGreyIcon)
         self.abortButton.setText("")
         self.abortButton.setEnabled(False)

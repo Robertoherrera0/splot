@@ -125,6 +125,9 @@ class SpecPlot2D(QWidget):
 
         self.tolerance_factor = 0.498  # in percentage for scattered plots
 
+        self.x_self_tol = 1.0
+        self.y_self_tol = 1.0
+        
         self.data_type = "scattered"
         self.style_2d = self.prefs.getValue("style_2d","scatter")
 

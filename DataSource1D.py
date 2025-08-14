@@ -105,12 +105,12 @@ class DataSource1D(DataSource):
         self.columns_widget.setDataBlock(self.datablock)
         self.columns_widget.setColumnDataHandler(self._columnDataHandler)
 
-        self.add_source_tab(1, self.columns_widget,  "Columns")
+        self.add_source_tab(1, self.columns_widget,  "Plot")
 
     def show_metadata_widget(self, flag=True):
         try:
             self.meta_widget = ScanMetadataWidget()
-            self.add_source_tab(2, self.meta_widget,  "Scan Info")
+            self.add_source_tab(2, self.meta_widget,  "Current Scan")
         except BaseException as e:
             import traceback
             log.log(2, "error creating metadata widget " + traceback.format_exc())
@@ -352,9 +352,9 @@ class DataSource1D(DataSource):
         if flag != self.errorflag:
             self.tabs.removeTab(idx)
             if flag and not self.errorflag:
-                self.tabs.insertTab(idx, self.meta_widget, icons.get_icon('attention'), "Scan Info")
+                self.tabs.insertTab(idx, self.meta_widget, icons.get_icon('attention'), "Current Scan")
             else:
-                self.tabs.insertTab(idx, self.meta_widget, "Scan Info")
+                self.tabs.insertTab(idx, self.meta_widget, "Current Scan")
 
             if curidx == idx:
                 self.tabs.setCurrentIndex(idx)
