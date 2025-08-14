@@ -60,12 +60,13 @@ class ScanMetadataWidget(QWidget):
 
         layout = QGridLayout()
         layout.setContentsMargins(5, 5, 5, 5)
+        layout.setHorizontalSpacing(20)
         self.setLayout(layout)
 
-        self.scanNoLabel = QLabel("Scan No.:")
+        self.scanNoLabel = QLabel("Scan Number:")
         self.dateLabel = QLabel("Date:")
         self.hklLabel = QLabel("HKL:")
-        self.pointsLabel = QLabel("Points:")
+        self.pointsLabel = QLabel("Total Points:")
         self.columnsLabel = QLabel("Columns:")
 
         self.scanNoValue = QLabel("")
@@ -123,22 +124,48 @@ class ScanMetadataWidget(QWidget):
         self.infoTabs.addTab(self.messageArea, "Messages")
         self.infoTabs.addTab(self.moreArea, "More...")
 
+        # --- Metadata layout (clean 2+1 rows) ---
+        layout.setHorizontalSpacing(20)
+        layout.setVerticalSpacing(4)
+
+        label_style = """
+            font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+            font-size: 12px;
+            color: #444;
+        """
+        value_style = """
+            font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+            font-size: 12px;
+            font-weight: 500;
+            color: #111;
+        """
+        # Make labels right-aligned, values left-aligned
+        for w in (self.scanNoLabel, self.pointsLabel, self.hklLabel, self.columnsLabel, self.dateLabel):
+            w.setAlignment(Qt.AlignLeft | Qt.AlignLeft)
+            w.setStyleSheet(label_style)
+
+        for w in (self.scanNoValue, self.pointsValue, self.hklValue, self.columnsValue, self.dateValue):
+            w.setAlignment(Qt.AlignLeft | Qt.AlignLeft)
+            w.setStyleSheet(value_style)
+
+        # Row 0
         layout.addWidget(self.scanNoLabel, 0, 0)
         layout.addWidget(self.scanNoValue, 0, 1)
+        layout.addWidget(self.pointsLabel, 0, 2)
+        layout.addWidget(self.pointsValue, 0, 3)
 
-        layout.addWidget(self.dateLabel,   1, 0)
-        layout.addWidget(self.dateValue,   1, 1)
+        # Row 1
+        layout.addWidget(self.hklLabel, 1, 0)
+        layout.addWidget(self.hklValue, 1, 1)
+        layout.addWidget(self.columnsLabel, 1, 2)
+        layout.addWidget(self.columnsValue, 1, 3)
 
-        layout.addWidget(self.hklLabel,    2, 0)
-        layout.addWidget(self.hklValue,    2, 1)
+        # Row 2
+        layout.addWidget(self.dateLabel, 2, 0)
+        layout.addWidget(self.dateValue, 2, 1, 1, 3)
 
-        layout.addWidget(self.pointsLabel,    3, 0)
-        layout.addWidget(self.pointsValue,    3, 1)
 
-        layout.addWidget(self.columnsLabel,    4, 0)
-        layout.addWidget(self.columnsValue,    4, 1)
-
-        layout.addWidget(self.spacer, 0, 2, 4, 1)
+        layout.addWidget(self.spacer, 0, 4, 3, 1)
 
         layout.addWidget(self.infoTabs, 5, 0, 1, 3)
 

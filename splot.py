@@ -539,7 +539,7 @@ def run_app(servkey="splot_embedded", winname="SPlot Embedded", specname="twoc")
 
     # Start SPEC command server
     cmdsrv = SpecServer(name=servkey, allow_name_change=False, auto_update=False)
-    cmdsrv.run() 
+    # cmdsrv.run()
 
     # Create main SPlot window object
     win = SPlotMain(winname)
@@ -555,6 +555,12 @@ def run_app(servkey="splot_embedded", winname="SPlot Embedded", specname="twoc")
 
     # Connect to SPEC at localhost:specname
     win.connectToSpec(f"localhost:{specname}", varname=None, check_datafile=True)
+
+    # Force SPEC to send current state, same as when user clicks "Connect to SPEC"
+    src = win.spec_source
+    if hasattr(src, "get_all_data"):
+        src.get_all_data()
+
 
     # Setup timer to update command server regularly
     timer = QTimer()

@@ -39,6 +39,8 @@ import time
 import sys
 import re
 
+from PySide6.QtWidgets import QTabWidget
+from PySide6.QtCore import Qt
 
 from pyspec.css_logger import log, log_exception
 from pyspec.file.spec import FileSpec
@@ -184,21 +186,64 @@ class SplotTabBar(QTabBar):
 
 
 class SplotTabWidget(QTabWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDocumentMode(True)
+        self.setTabsClosable(True)
+        self.setTabPosition(QTabWidget.North)
 
-    def __init__(self, parent, *args):
-        self.parent = parent
-        QTabWidget.__init__(self, *args)
-        self.setTabBar(SplotTabBar(self))
-        if qt_variant() in ["PyQt6", "PySide6"]:
-            self.setTabPosition(QTabWidget.TabPosition.North)
-        else:
-            self.setTabPosition(QTabWidget.North)
+        self.tabBar().setMovable(False)
+        self.tabCloseRequested.connect(self.removeTab)
+        self.tabBar().setDrawBase(False)
+
+        self.setStyleSheet("""
+            QTabBar {
+                qproperty-drawBase: 0;
+            }
+            QTabBar::tab {
+                font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+                font-size: 13px;
+                font-weight: 500;
+                color: #2b2b2b;
+                padding: 6px 14px;
+                background: transparent;
+                border: none;
+            }
+            QTabBar::tab:selected {
+                border-bottom: 2px solid #2b2b2b;
+                background-color: transparent;
+            }
+            QTabBar::tab:hover {
+                background-color: #f1f1f1;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #f5f5f5;
+                border-bottom: 2px solid #bbbbbb;
+            }
+            QTabWidget::pane {
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+                background: #ffffff;
+                margin-top: -1px;
+                padding: 4px;
+            }
+            QTabBar::close-button {
+                image: url(icons/close.svg);
+                subcontrol-position: right;
+                margin-left: 6px;
+            }
+            QTabBar::close-button:hover {
+                background: transparent;
+            }
+        """)
+
 
     def tabInserted(self, index):
         self.tabBar().setVisible(self.count() > 1)
 
     def tabRemoved(self, index):
         self.tabBar().setVisible(self.count() > 1)
+
 
 class SPlotMain(QMainWindow):
 

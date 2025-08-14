@@ -138,7 +138,7 @@ class McaSource(DataSource1D):
 
         self.spacer = QLabel("")
         self.spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        
+
         self.spec_value.setObjectName("specname")
 
         self.info_widget = QTextEdit()
@@ -148,15 +148,16 @@ class McaSource(DataSource1D):
         self.top_layout.setSpacing(3)
         self.top_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.top_layout.addWidget(self.spec_label,0,0)
-        self.top_layout.addWidget(self.spec_value,0,1)
-        self.top_layout.addWidget(self.spacer,0,2)
-        self.top_layout.addWidget(self.display_label,1,0)
-        self.top_layout.addWidget(self.display_value,1,1)
+        # Reposition so spec and display info are side-by-side
+        self.top_layout.addWidget(self.spec_label, 0, 0)
+        self.top_layout.addWidget(self.spec_value, 0, 1)
+        self.top_layout.addWidget(self.display_label, 0, 2)
+        self.top_layout.addWidget(self.display_value, 0, 3)
+        self.top_layout.addWidget(self.spacer, 0, 4)
 
         self.top_widget.setLayout(self.top_layout)
         self.set_source_header_widget(self.top_widget)
-        self.add_source_tab(1, self.info_widget,  "Info")
+        self.add_source_tab(1, self.info_widget, "Info")
 
         self.roi_dialog = RoiSelectionDialog(self)
 

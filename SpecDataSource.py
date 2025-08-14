@@ -167,45 +167,55 @@ class SpecDataSource(DataSource1D):
 
         self.initOk = False
 
+    from PySide6.QtGui import QFont
+
     def init_widget(self):
         self.motorWidgets = {}
 
         self.topWidget = QWidget()
 
-        self.topLayout = QGridLayout()
-        self.topLayout.setSpacing(3)
-        self.topLayout.setContentsMargins(0, 0, 0, 0)
+        self.topLayout = QHBoxLayout()
+        self.topLayout.setSpacing(12)
+        self.topLayout.setContentsMargins(0, 4, 0, 12)  # left, top, right, bottom
+
+
+        font = QFont("IBM Plex Sans", 10) 
 
         self.specLabel = QLabel("SPEC:")
+        self.specLabel.setFont(font)
         self.specValue = QLabel("")
+        self.specValue.setFont(font)
         self.specValue.setObjectName("specname")
+
+        self.variableLabel = QLabel("Data:")
+        self.variableLabel.setFont(font)
+        self.variableValue = QLabel("")
+        self.variableValue.setFont(font)
+
+        self.statusLabel = QLabel("Status:")
+        self.statusLabel.setFont(font)
+        self.statusValue = QLabel("")
+        self.statusValue.setFont(font)
+        self.statusValue.setObjectName("readystatus")
 
         self.spacer = QLabel("")
         self.spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        self.variableLabel = QLabel("Displaying:")
-        self.variableValue = QLabel("")
-
-        self.statusLabel = QLabel("Status:")
-        self.statusValue = QLabel("")
-        self.statusValue.setObjectName("readystatus")
-
-        self.topLayout.addWidget(self.specLabel, 0, 0)
-        self.topLayout.addWidget(self.specValue, 0, 1)
-        self.topLayout.addWidget(self.spacer, 0, 2, 5, 1)
-
-        self.topLayout.addWidget(self.variableLabel, 1, 0)
-        self.topLayout.addWidget(self.variableValue, 1, 1)
-
-        self.topLayout.addWidget(self.statusLabel, 2, 0)
-        self.topLayout.addWidget(self.statusValue, 2, 1)
+        # assemble with separators
+        self.topLayout.addWidget(self.specLabel)
+        self.topLayout.addWidget(self.specValue)
+        self.topLayout.addWidget(QLabel("|"))
+        self.topLayout.addWidget(self.variableLabel)
+        self.topLayout.addWidget(self.variableValue)
+        self.topLayout.addWidget(QLabel("|"))
+        self.topLayout.addWidget(self.statusLabel)
+        self.topLayout.addWidget(self.statusValue)
+        self.topLayout.addWidget(self.spacer)
 
         self.topWidget.setLayout(self.topLayout)
-
         self.set_source_header_widget(self.topWidget)
 
         self.serverPanel = ServerPanel()
-
         self.statusDisconnected()
 
         self.timer = QTimer()
