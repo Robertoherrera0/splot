@@ -135,17 +135,28 @@ class ScanRunnerWidget(QFrame):
                     log.log(2, f"Open builder failed: {e}")
                     return
             p = p.parent()
-            
+
     def _open_dir(self):
-        # bubble up until we find parent's _open_scan_builder()
-        p = self.parent()
-        while p is not None:
-            if hasattr(p, "_open_scan_builder"):
-                try:
-                    p._open_scan_builder()
-                except Exception as e:
-                    log.log(2, f"Open builder failed: {e}")
-                return
+        path = os.path.abspath(self._scan_dir or "")
+        if not os.path.isdir(path):
+            log.log(2, f"Directory not found: {path}")
+            return
+
+        # Primary: Qt cross‑platform open
+        if QDesktopServices.openUrl(QUrl.fromLocalFile(path)):
+            return
+
+        # Fallbacks if the desktop handler is unavailable
+        try:
+            if sys.platform.startswith("linux"):
+                subprocess.Popen(["xdg-open", path],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", path])
+            else:
+                os.startfile(path)  # type: ignore[attr-defined]
+        except Exception as e:
+            log.log(2, f"Open directory failed: {e}")
 
 
     def _send(self, cmd: str):
