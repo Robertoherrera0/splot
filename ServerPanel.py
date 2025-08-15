@@ -1316,6 +1316,9 @@ from Constants import *
 from MotorWidget import MotorWidget
 from ScanWidget import ScanWidget
 from ScanBuilder import ScanBuilderDialog
+from CommandLineWidget import CommandLineWidget
+from ScanRunnerWidget import ScanRunnerWidget
+
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit,
@@ -1528,13 +1531,12 @@ class MoveWidget(QWidget):
 
 
     def _moveCurrentMotor(self):
-        # Validate input and route through whichever connection is available
         if not self.selected_motor:
             return
         val = self.posInput.text().strip()
         if not val:
             return
-        cmd = f"mv {self.selected_motor} {val}"
+        cmd = f"umv {self.selected_motor} {val}"
         self._send(cmd)
 
     def _send(self, cmd: str):
@@ -1544,11 +1546,10 @@ class MoveWidget(QWidget):
             elif self.conn is not None and hasattr(self.conn, "send"):
                 self.conn.send(cmd)
             else:
-                # Fallback to your app's controller
+                # wrong
                 from gans_control.backend.session.spec_session import spec_controller
                 spec_controller.send(cmd)
         except Exception as e:
-            # keep your logging style
             log.log(2, f"Move failed: {e}")
 
     def _update(self):
@@ -1590,28 +1591,6 @@ class ServerPanel(QWidget):
         moveLayout.setSpacing(0)
         moveLayout.setContentsMargins(1, 1, 1, 1)
 
-        # --- Raw SPEC Command Input ---
-        cmdGroup = QGroupBox("Command")
-        cmdGroup.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        cmdGroup.setMaximumHeight(50)
-        layout.addWidget(cmdGroup)
-
-        cmdLayout = QHBoxLayout()
-        cmdLayout.setContentsMargins(1, 1, 1, 1)
-        cmdLayout.setSpacing(2)
-        cmdGroup.setLayout(cmdLayout)
-        cmdGroup.setFlat(False)
-
-        self.cmd_input = QLineEdit()
-        self.cmd_input.setPlaceholderText("Enter SPEC command...")
-        self.cmd_send_btn = QPushButton("Send")
-        self.cmd_send_btn.setFixedWidth(50)
-        self.cmd_send_btn.clicked.connect(self._send_command)
-        self.cmd_input.returnPressed.connect(self._send_command)
-
-        cmdLayout.addWidget(self.cmd_input)
-        cmdLayout.addWidget(self.cmd_send_btn)
-
         # Scan group
         scanLayout = QVBoxLayout()
         scanGroup.setLayout(scanLayout)
@@ -1620,38 +1599,32 @@ class ServerPanel(QWidget):
         self.scanWidget = ScanWidget()
         scanLayout.addWidget(self.scanWidget)
 
-        # === Scan Builder & Runner panel ===
-        builder_row = QHBoxLayout()
-
-        # 1. Open Builder button
-        self.open_builder_btn = QPushButton("Open Scan Builder")
-        self.open_builder_btn.setFixedHeight(28)
-        self.open_builder_btn.clicked.connect(self._open_scan_builder)
-        builder_row.addWidget(self.open_builder_btn)
-
-        # 2. File selector
-        self.scn_selector = QComboBox()
-        self.scn_selector.setFixedHeight(28)
-        self._populate_scn_files()
-        builder_row.addWidget(self.scn_selector, 1)
-
-        # 3. Run button
-        self.run_scn_btn = QToolButton()
-        self.run_scn_btn.setText("Run")
-        self.run_scn_btn.setFixedHeight(28)
-        self.run_scn_btn.clicked.connect(self._run_selected_scn)
-        builder_row.addWidget(self.run_scn_btn)
-
-        scanLayout.addLayout(builder_row)
-
         scanLayout.setSpacing(0)
         scanLayout.setContentsMargins(1, 1, 1, 1)
+        layout.addWidget(scanGroup)
+
+        self.scanRunner = ScanRunnerWidget(self)
+        self.scanRunner.set_connection(self.conn)
+        layout.addWidget(self.scanRunner)
+
+        # --- Raw SPEC Command Input ---
+        self.cmdline = CommandLineWidget(self)
+        layout.addWidget(self.cmdline)
+
+        # tidy overall panel spacing
+        layout.setAlignment(Qt.AlignTop)
+        layout.setContentsMargins(1, 1, 1, 1)
+        layout.setSpacing(6)
 
     def set_connection(self, conn):
         self.conn = conn
         self.moveWidget.set_connection(conn)
         if hasattr(self.scanWidget, "set_connection"):
             self.scanWidget.set_connection(conn)
+        if hasattr(self, "scanRunner"):
+            self.scanRunner.set_connection(conn)
+
+
 
     def setDataSource(self, datasource):
         self.datasource_ref = datasource

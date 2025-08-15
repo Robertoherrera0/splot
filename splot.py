@@ -539,13 +539,14 @@ def run_app(servkey="splot_embedded", winname="SPlot Embedded", specname="twoc")
 
     # Start SPEC command server
     cmdsrv = SpecServer(name=servkey, allow_name_change=False, auto_update=False)
-    # cmdsrv.run()
+    cmdsrv.run()
 
     # Create main SPlot window object
     win = SPlotMain(winname)
     win.set_command_server(cmdsrv)
     win_id = win.winId()
-
+    win.set_command_server(cmdsrv)
+    
     # Optional geometry (will not show anyway)
     if prefs["geometry"]:
         x, y, width, height = map(int, prefs["geometry"].split(","))
