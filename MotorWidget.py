@@ -126,7 +126,6 @@ from StopButton import StopButton
 #         motorLayout.addWidget(self.mspacer)
 
 #         self.update()
-
 class MotorWidget(QWidget):
     def __init__(self, motmne=None, spec=None, *args):
         super().__init__()
@@ -137,32 +136,13 @@ class MotorWidget(QWidget):
         self.motmne = motmne
         self.state = SpecMotor.NOTINITIALIZED
         self.is_shown = False
+        self.move_mode = "absolute"  # default
 
         self.setStyleSheet("""
-            QLabel {
-                font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-                font-size: 10pt;
-                color: #2b2b2b;
-            }
-            QLineEdit {
-                font-size: 10pt;
-                font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-                border: 1px solid #dcdfe3;
-                border-radius: 4px;
-                padding: 2px 4px;
-                background-color: #ffffff;
-            }
-            QPushButton {
-                font-size: 9.5pt;
-                font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-                padding: 2px 8px;
-                border: 1px solid #c0c0c0;
-                border-radius: 4px;
-                background-color: #f5f5f5;
-            }
-            QPushButton:hover {
-                background-color: #e6e6e6;
-            }
+            QLabel { font-family: 'IBM Plex Sans','Segoe UI',sans-serif; font-size:10pt; color:#2b2b2b; }
+            QLineEdit { font-size:10pt; font-family:'IBM Plex Sans','Segoe UI',sans-serif; border:1px solid #dcdfe3; border-radius:4px; padding:2px 4px; background-color:#ffffff; }
+            QPushButton { font-size:9.5pt; font-family:'IBM Plex Sans','Segoe UI',sans-serif; padding:2px 8px; border:1px solid #c0c0c0; border-radius:4px; background-color:#f5f5f5; }
+            QPushButton:hover { background-color:#e6e6e6; }
         """)
 
         motorLayout = QHBoxLayout()
@@ -180,12 +160,18 @@ class MotorWidget(QWidget):
         self.currentLabel = QLabel()
         self.currentLabel.setFixedWidth(70)
 
+        # --- NEW: mode dropdown (Abs/Rel) ---
+        self.modeCombo = QComboBox()
+        self.modeCombo.addItem("Absolute", userData="absolute")
+        self.modeCombo.addItem("Relative", userData="relative")
+        self.modeCombo.currentIndexChanged.connect(self._modeChanged)
+
         self.moveValue = QLineEdit()
         self.moveValue.setFixedWidth(70)
         self.moveValue.returnPressed.connect(self.doMove)
         self.moveValue.textEdited.connect(self.positionEdited)
 
-        self.goButton = QPushButton("Go")
+        self.goButton = QPushButton("Move")
         self.goButton.setFixedWidth(50)
         self.goButton.clicked.connect(self.doMove)
 
@@ -200,28 +186,39 @@ class MotorWidget(QWidget):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        # Add widgets
+        # Layout: (Label) (Curr?) (Mode dropdown) (Input) (Go) (Cancel) ......
         motorLayout.addWidget(self.motorLabel)
+        motorLayout.addWidget(self.currentLabel)
+        motorLayout.addWidget(self.modeCombo)
         motorLayout.addWidget(self.moveValue)
         motorLayout.addWidget(self.goButton)
         motorLayout.addWidget(self.cancelButton)
         motorLayout.addWidget(spacer)
 
         if motmne and spec:
-            cb = {'motorPositionChanged': self.motor_position_changed,
-                  'motorStateChanged': self.motor_state_changed}
+            cb = {
+                'motorPositionChanged': self.motor_position_changed,
+                'motorStateChanged': self.motor_state_changed
+            }
             self.motor = SpecMotor.SpecMotorA(spec, motmne, callbacks=cb)
 
         self.update()
 
+    # --- Mode handling ---
+    def _modeChanged(self, idx: int):
+        self.setMoveMode(self.modeCombo.itemData(idx) or "absolute")
 
+    def setMoveMode(self, mode: str):
+        self.move_mode = "relative" if (mode or "").lower().startswith("rel") else "absolute"
+
+    # --- The rest is unchanged except doMove() ---
     def stop(self):
         if self.motor is not None:
             self.motor.stop()
 
     def positionEdited(self, value):
         try:
-            a = float(value)
+            float(value)
             self.goButton.setDisabled(False)
         except:
             self.goButton.setDisabled(True)
@@ -235,7 +232,6 @@ class MotorWidget(QWidget):
 
     def setTargetPosition(self, position, modified=True):
         self.moveValue.setText("%0.4g" % float(position))
-
         if modified:
             self.positionEdited(position)
 
@@ -244,7 +240,6 @@ class MotorWidget(QWidget):
         self.update()
 
     def update(self):
-
         if not self.is_shown:
             return
 
@@ -262,7 +257,10 @@ class MotorWidget(QWidget):
         if self._position is None:
             self._position = self.motor.get_position()
 
+        # show current absolute position in the input
         self.moveValue.setText("%0.4g" % self._position)
+        # optionally also mirror in the label if you want:
+        # self.currentLabel.setText("%0.4g" % self._position)
 
         if self.state in [SpecMotor.MOVING, SpecMotor.MOVESTARTED]:
             self.moveValue.setStyleSheet("background-color: #f0f033;")
@@ -275,7 +273,6 @@ class MotorWidget(QWidget):
             self.enable()
         self.blockSignals(False)
 
-
     def motor_position_changed(self, newpos):
         self.setCurrentPosition(newpos)
         self.update()
@@ -284,14 +281,14 @@ class MotorWidget(QWidget):
         self.state = state
         self.update()
 
-    def hideEvent(self,ev):
+    def hideEvent(self, ev):
         self.is_shown = False
-        QWidget.hideEvent(self,ev)
+        QWidget.hideEvent(self, ev)
 
-    def showEvent(self,event):
+    def showEvent(self, event):
         self.is_shown = True
         self.update()
-        QWidget.showEvent(self,event)
+        QWidget.showEvent(self, event)
 
     def enable(self):
         self.goButton.setDisabled(False)
@@ -302,41 +299,22 @@ class MotorWidget(QWidget):
         self.stopButton.setActive(True)
 
     def stopMotor(self):
-        log.log(3,"Stopping from motorWidget")
+        log.log(3, "Stopping from motorWidget")
         self.motor.abort()
 
     def doMove(self):
         try:
-            newPos = self.moveValue.text()
-            self.motor.move(float(newPos))
+            delta_or_abs = float(self.moveValue.text())
+            if self.move_mode == "relative":
+                # Safer than SpecMotor.move_relative in your version:
+                target = self.motor.get_position() + delta_or_abs
+                self.motor.move(target)
+            else:
+                self.motor.move(delta_or_abs)
             self.setModified(False)
-        except BaseException as e:
+        except BaseException:
             import traceback
             log.log(2, "cannot do move. %s" % traceback.format_exc())
 
     def cancelMove(self):
         self.setModified(False)
-
-def update_spec():
-    from pyspec.client import SpecEventsDispatcher 
-    SpecEventsDispatcher.dispatch()
-
-def test():
-    import sys
-
-    app = QApplication([])
-    win = QMainWindow()
-    motor = MotorWidget("chi", "localhost:fourc")
-
-    win.setCentralWidget(motor)
-    win.show()
-
-    timer = QTimer()
-    timer.timeout.connect(update_spec)
-    timer.start(10)
-
-    sys.exit(app.exec_())
-
-
-if __name__ == '__main__':
-    test()

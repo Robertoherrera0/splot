@@ -496,13 +496,13 @@ If a "varname" is provided, the connection will follow a data
 array by that name, rather than the standard SCAN_D data array.
 
 """ % {'progname': progname } )
-def run_app(servkey="splot_embedded", winname="SPlot Embedded", specname="twoc"):
+def run_app(servkey="splot_embedded", connectpars="localhost:fourc", winname="SPlot Embedded"):
     """
-    Launch an embedded SPlot widget that:
-    - starts a SPEC command server with servkey,
-    - connects to localhost:specname,
-    - returns (central QWidget, QApplication instance).
-    Does NOT show window or exec event loop.
+    Embedded splot that mimics:  splot -C <servkey> <connectpars>
+      - Starts a SPEC command server named <servkey> (same flags as CLI)
+      - Connects to SPEC at <connectpars> (e.g. 'localhost:twoc' or 'twoc')
+      - Returns (central QWidget, QApplication instance)
+    Does NOT show a window or exec the Qt event loop.
     """
     import re
     from PySide6.QtWidgets import QApplication
@@ -523,11 +523,11 @@ def run_app(servkey="splot_embedded", winname="SPlot Embedded", specname="twoc")
     if app is None:
         app = CaptureApplication(winname, ['splot'])
 
-    # Load user prefs
+    # Load prefs (geometry, saved cmd_server key, etc.)
     prefs = Preferences()
     prefs.load()
 
-    # Start watchdog if servkey has _PID format
+    # Watchdog if servkey matches "<name>_<ppid>" (same behavior as main() -C)
     watcher = None
     mat = re.match(r"(?P<name>\w+)\_(?P<pid>\d+)", servkey)
     if mat:
@@ -537,40 +537,32 @@ def run_app(servkey="splot_embedded", winname="SPlot Embedded", specname="twoc")
             watcher = watchdog(ppid)
             watcher.start()
 
-    # Start SPEC command server
+    # Create SPEC command server (exact flags as in main() when -C is used)
+    # Note: main() does not call run(); it relies on periodic _update() via the timer.
     cmdsrv = SpecServer(name=servkey, allow_name_change=False, auto_update=False)
-    cmdsrv.run()
 
-    # Create main SPlot window object
+    # Build main window object (no show/exec; we're embedding)
     win = SPlotMain(winname)
     win.set_command_server(cmdsrv)
     win_id = win.winId()
-    win.set_command_server(cmdsrv)
-    
-    # Optional geometry (will not show anyway)
+
+    # Apply saved or default geometry (harmless even if we don't show)
     if prefs["geometry"]:
         x, y, width, height = map(int, prefs["geometry"].split(","))
     else:
         x, y, width, height = 200, 100, 1000, 600
     win.setGeometry(x, y, width, height)
 
-    # Connect to SPEC at localhost:specname
-    win.connectToSpec(f"localhost:{specname}", varname=None, check_datafile=True)
+    # Connect to SPEC
+    win.connectToSpec(connectpars, varname=None, check_datafile=True)
 
-    # Force SPEC to send current state, same as when user clicks "Connect to SPEC"
-    src = win.spec_source
-    if hasattr(src, "get_all_data"):
-        src.get_all_data()
-
-
-    # Setup timer to update command server regularly
+    # Create the same periodic timer used by main() to service the command server
     timer = QTimer()
     timer.timeout.connect(update_cmdserver)
-    timer.start(100)
+    timer.start(CMDSERVER_INTERVAL)  # use the same constant as main()
 
-    # Return the central widget and QApplication instance for embedding
+    # Return the central widget for embedding, and the (possibly reused) app
     return win.centralWidget(), app
-
 
 
 if __name__ == '__main__':
@@ -582,7 +574,6 @@ if __name__ == '__main__':
 
     The application can be started in file-only mode with the switch -f
     followed by the file name
-
     """
 
     # Default values

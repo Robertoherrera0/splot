@@ -518,6 +518,7 @@ class SpecDataConnection(object):
     
             if self.source:
                 self.source.server_connected()
+
         except:
             log_exception()
 
