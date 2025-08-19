@@ -430,6 +430,33 @@ class SPlotMain(QMainWindow):
 
         prefs.save()
 
+    def use_external_menubar(self, host_menubar):
+        try:
+            old = getattr(self, "menubar_set", None)
+            if old is not None and old.menubar is not host_menubar:
+                for attr in ("fileMenu","specMenu","viewMenu","plotMenu","dataMenu","mathMenu","helpMenu"):
+                    menu = getattr(old, attr, None)
+                    if menu:
+                        try:
+                            old.menubar.removeAction(menu.menuAction())
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        # Build our menus on the host menubar
+        self.menubar_set = self.createMenuBarSet(host_menubar)
+
+        # Keep our internal menubar out of the way
+        try:
+            self.menuBar().hide()
+        except Exception:
+            pass
+
+        # Refresh enabled/disabled states for the newly-mounted menus
+        if self.active_source:
+            self.updateMenuBar(self.active_source)
+
 #------- Handle sources
 
     def createMenuBarSet(self, menubar):
