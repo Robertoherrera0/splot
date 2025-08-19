@@ -1725,7 +1725,7 @@ class _ScanW(QWidget):
         for par in self.pars:
             if par.getType() == VSCANMOTOR:
                 par.setValues(values[cursor:cursor + 4])
-                cursor += 5
+                cursor += 4   # was 5
             elif par.getType() == MOTOR:
                 par.setValues(values[cursor:cursor + 3])
                 cursor += 3
@@ -1746,7 +1746,8 @@ class _ScanW(QWidget):
         else:
             self.total_points = 0
 
-        print("Total scan points are: %s" % (total_points))
+        print("Total scan points are: %s" % (self.total_points))  # was total_points
+
 
     def getValues(self):
         retvals = []
@@ -2155,14 +2156,15 @@ class ScanWidget(QWidget):
 
         eta_txt = "—"
         if eta_epoch is not None:
-            import time
             eta_txt = time.strftime("%H:%M", time.localtime(eta_epoch))
 
         left_txt = "—"
         if seconds_left is not None:
             left_txt = self._fmt_duration(seconds_left)
 
-        self.timeLabel.setText(f"ETA {eta_txt} • {left_txt} left")
+        # update the two labels that actually exist
+        self.timeRemainingLabel.setText(f"{left_txt} left" if seconds_left is not None else "—")
+        self.finishTimeLabel.setText(eta_txt if eta_epoch is not None else "—")
 
     def _update_timer_tick(self):
         if not self.is_running:

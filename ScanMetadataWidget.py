@@ -32,21 +32,33 @@
 #     * or otherwise, arising from, out of or in connection with    *
 #     * the software or the use of other dealings in the software.  *
 #
+#*******#******************************************************************************
+#
+#  @(#)ScanMetadataWidget.py  3.5  10/01/20 CSS
+#
+#  "splot" Release 3
+#
 #******************************************************************************
 
+import os
 import sys
 import time
 
-from pyspec.graphics.QVariant import *
-from pyspec.css_logger import log
+from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+from PySide6.QtCore import QTimer
 
-from ScanLive import LiveScanTable
+from pyspec.graphics.QVariant import *   # brings in Qt widgets/symbols in this tree
+from pyspec.css_logger import log
 import icons
 
+
 class ScanMetadataWidget(QWidget):
+    """Scan metadata panel with tabs:
+       Motors | Current Scan (blank placeholder) | Comments | Messages | More...
+       NO LiveScanTable, NO polling — just the original metadata UI restored.
+    """
 
     def __init__(self, parent=None):
-
         QWidget.__init__(self, parent)
 
         self.sources = []
@@ -57,141 +69,266 @@ class ScanMetadataWidget(QWidget):
         self.showingHKL = True
         self.showingMore = True
 
+        self._conn = None
+        self._scan_timer = None
+
+
         self.scanno = -1
+        self.has_motmnes = False
 
         layout = QGridLayout()
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setHorizontalSpacing(20)
+        layout.setVerticalSpacing(4)
         self.setLayout(layout)
 
-        self.scanNoLabel = QLabel("Scan Number:")
-        self.dateLabel = QLabel("Date:")
-        self.hklLabel = QLabel("HKL:")
-        self.pointsLabel = QLabel("Total Points:")
-        self.columnsLabel = QLabel("Columns:")
+        # --- Header frame ---
+        headerFrame = QFrame()
+        headerFrame.setObjectName("HeaderFrame")
+        headerFrame.setStyleSheet("""
+        QLabel {
+            font-family: 'IBM Plex Sans','Segoe UI',sans-serif;
+            font-size: 11px;
+            color: #555;
+        }
+        QLabel.value {
+            font-size: 12.5px;
+            font-weight: 600;
+            color: #222;
+        }
 
-        self.scanNoValue = QLabel("")
-        self.dateValue = QLabel("")
-        self.hklValue = QLabel("")
-        self.pointsValue = QLabel("")
-        self.columnsValue = QLabel("")
+        """)
+        headerLayout = QGridLayout(headerFrame)
+        headerLayout.setContentsMargins(12, 8, 12, 8)
+        headerLayout.setHorizontalSpacing(25)
+        headerLayout.setVerticalSpacing(6)
 
-        self.scanNoValue.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.dateValue.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.hklValue.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.pointsValue.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.columnsValue.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        # --- Labels + Values ---
+        self.scanNoLabel   = QLabel("Scan Number:")
+        self.dateLabel     = QLabel("Date:")
+        self.hklLabel      = QLabel("HKL:")
+        self.pointsLabel   = QLabel("Total Points:")
+        self.columnsLabel  = QLabel("Columns:")
 
-        self.spacer = QLabel("")
-        self.spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.scanNoValue   = QLabel("")
+        self.dateValue     = QLabel("")
+        self.hklValue      = QLabel("")
+        self.pointsValue   = QLabel("")
+        self.columnsValue  = QLabel("")
 
+        for w in (self.scanNoValue, self.dateValue, self.hklValue,
+                  self.pointsValue, self.columnsValue):
+            w.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            w.setObjectName("value")
+
+        # --- Layout placement ---
+        headerLayout.addWidget(self.scanNoLabel, 0, 0)
+        headerLayout.addWidget(self.scanNoValue, 0, 1)
+        headerLayout.addWidget(self.pointsLabel, 0, 2)
+        headerLayout.addWidget(self.pointsValue, 0, 3)
+
+        headerLayout.addWidget(self.hklLabel, 1, 0)
+        headerLayout.addWidget(self.hklValue, 1, 1)
+        headerLayout.addWidget(self.columnsLabel, 1, 2)
+        headerLayout.addWidget(self.columnsValue, 1, 3)
+
+        headerLayout.addWidget(self.dateLabel, 2, 0)
+        headerLayout.addWidget(self.dateValue, 2, 1, 1, 3)
+
+        layout.addWidget(headerFrame, 0, 0, 1, 5)
+
+        # --- Tabs ---
         self.infoTabs = QTabWidget()
         self.infoTabs.setObjectName("infotabs")
 
+        # Motors (drop-in replacement)
         self.motorArea = QScrollArea()
+        self.motorArea.setWidgetResizable(True)
+        self.motorArea.setFrameShape(QFrame.NoFrame)
+        self.motorArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.motorArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.motorArea.setAlignment(Qt.AlignLeft)  # don't center/crop
 
         self.motorTreeWidget = QTreeWidget()
-        self.motorTreeWidget.setObjectName("motortree")
-        self.motorTreeWidget.setAlternatingRowColors(True)
+        self.motorTreeWidget.setObjectName("MotorTree")
+        self.motorTreeWidget.setAlternatingRowColors(False)
+        self.motorTreeWidget.setRootIsDecorated(False)
+        self.motorTreeWidget.setIndentation(0)
+        self.motorTreeWidget.setUniformRowHeights(True)
+        self.motorTreeWidget.setFocusPolicy(Qt.NoFocus)
+        self.motorTreeWidget.setSelectionMode(QTreeWidget.NoSelection)
+
+        # IMPORTANT: let it expand (no fixed/min/max width here)
+        self.motorTreeWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Match MotorTable look
+        self.motorTreeWidget.setStyleSheet("""
+        QTreeWidget#MotorTree {
+            border: 1px solid #dcdfe3;
+            border-radius: 6px;
+            font-family: 'IBM Plex Sans','Segoe UI',sans-serif;
+            font-size: 8pt;
+        }
+        QHeaderView::section {
+            background-color: #f4f5f7;
+            font-weight: 500;
+            padding: 2px 6px;
+            font-size: 8pt;
+            color: #2b2b2b;
+            border: none;
+        }
+        QTreeWidget#MotorTree::item {
+            height: 22px;
+            border-bottom: 1px solid #e1e4e8;  /* subtle row line */
+        }
+        """)
 
         self.motorArea.setWidget(self.motorTreeWidget)
-        self.motorArea.setWidgetResizable(True)
-        self.motorArea.setAlignment(Qt.AlignHCenter)
 
-        # self.liveArea = QScrollArea()
-        # self.liveView = LiveScanTable(self)
-        # self.liveArea.setWidget(self.liveView)
-        # self.liveArea.setWidgetResizable(True)
-        # self.liveArea.setAlignment(Qt.AlignHCenter)
 
+        # Current Scan (blank placeholder)
+        # Current Scan (table)  — the only widget inside the scroll area
+        self.currentScanArea = QScrollArea()
+        self.currentScanArea.setWidgetResizable(True)
+        self.currentScanArea.setAlignment(Qt.AlignHCenter)
+
+        self.scanTable = QTableWidget()
+        self.scanTable.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.scanTable.setSelectionMode(QTableWidget.NoSelection)
+        self.scanTable.setAlternatingRowColors(True)
+        self.scanTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.scanTable.verticalHeader().setVisible(True)
+
+        # put the table into the scroll area exactly once
+        self.currentScanArea.setWidget(self.scanTable)
+
+        # Comments
         self.commentsArea = QTextBrowser()
 
+        # Messages
         self.messageArea = QScrollArea()
+        self.messageArea.setWidgetResizable(True)
+        self.messageArea.setAlignment(Qt.AlignHCenter)
 
         self.messageTreeWidget = QTreeWidget()
         self.messageTreeWidget.setObjectName("errortree")
         self.messageTreeWidget.setAlternatingRowColors(True)
-
         self.messageArea.setWidget(self.messageTreeWidget)
-        self.messageArea.setWidgetResizable(True)
-        self.messageArea.setAlignment(Qt.AlignHCenter)
 
+        # More...
         self.moreArea = QScrollArea()
+        self.moreArea.setWidgetResizable(True)
+        self.moreArea.setAlignment(Qt.AlignHCenter)
 
         self.moreTreeWidget = QTreeWidget()
         self.moreTreeWidget.setObjectName("moretree")
         self.moreTreeWidget.setAlternatingRowColors(True)
-
         self.moreArea.setWidget(self.moreTreeWidget)
-        self.moreArea.setWidgetResizable(True)
-        self.moreArea.setAlignment(Qt.AlignHCenter)
 
-        self.infoTabs.addTab(self.motorArea, "Motors")
-        # self.infoTabs.addTab(self.liveArea, "Current Scan")
+        # Add tabs in the exact order you wanted
+        self.infoTabs.addTab(self.motorArea, "Starting Positions")
+        self.infoTabs.addTab(self.currentScanArea, "Scan Data")
         self.infoTabs.addTab(self.commentsArea, "Comments")
         self.infoTabs.addTab(self.messageArea, "Messages")
         self.infoTabs.addTab(self.moreArea, "More...")
 
-        # --- Metadata layout (clean 2+1 rows) ---
-        layout.setHorizontalSpacing(20)
-        layout.setVerticalSpacing(4)
+        # Spacer
+        self.spacer = QLabel("")
+        self.spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        label_style = """
-            font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-            font-size: 12px;
-            color: #444;
-        """
-        value_style = """
-            font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-            font-size: 12px;
-            font-weight: 500;
-            color: #111;
-        """
-        # Make labels right-aligned, values left-aligned
-        for w in (self.scanNoLabel, self.pointsLabel, self.hklLabel, self.columnsLabel, self.dateLabel):
-            w.setAlignment(Qt.AlignLeft | Qt.AlignLeft)
-            w.setStyleSheet(label_style)
+        # --- Layout grid (3 rows header + tabs) ---
+        layout.addWidget(self.scanNoLabel,  0, 0)
+        layout.addWidget(self.scanNoValue,  0, 1)
+        layout.addWidget(self.pointsLabel,  0, 2)
+        layout.addWidget(self.pointsValue,  0, 3)
 
-        for w in (self.scanNoValue, self.pointsValue, self.hklValue, self.columnsValue, self.dateValue):
-            w.setAlignment(Qt.AlignLeft | Qt.AlignLeft)
-            w.setStyleSheet(value_style)
-
-        # Row 0
-        layout.addWidget(self.scanNoLabel, 0, 0)
-        layout.addWidget(self.scanNoValue, 0, 1)
-        layout.addWidget(self.pointsLabel, 0, 2)
-        layout.addWidget(self.pointsValue, 0, 3)
-
-        # Row 1
-        layout.addWidget(self.hklLabel, 1, 0)
-        layout.addWidget(self.hklValue, 1, 1)
+        layout.addWidget(self.hklLabel,     1, 0)
+        layout.addWidget(self.hklValue,     1, 1)
         layout.addWidget(self.columnsLabel, 1, 2)
         layout.addWidget(self.columnsValue, 1, 3)
 
-        # Row 2
-        layout.addWidget(self.dateLabel, 2, 0)
-        layout.addWidget(self.dateValue, 2, 1, 1, 3)
+        layout.addWidget(self.dateLabel,    2, 0)
+        layout.addWidget(self.dateValue,    2, 1, 1, 3)
 
+        layout.addWidget(self.spacer,       0, 4, 3, 1)
+        layout.addWidget(self.infoTabs,     5, 0, 1, 3)
 
-        layout.addWidget(self.spacer, 0, 4, 3, 1)
+        # let the tabs area take the horizontal/vertical space
+        layout.setColumnStretch(0, 0)
+        layout.setColumnStretch(1, 1)  # give content room
+        layout.setColumnStretch(2, 0)
+        layout.setColumnStretch(3, 0)
+        layout.setRowStretch(5, 1)     # the tab row expands
 
-        layout.addWidget(self.infoTabs, 5, 0, 1, 3)
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
+        # initial hiding logic
         self.setHKL(None)
         self.setComments(None)
         self.setMessages(None)
         self.setMore(None)
 
     def set_connection(self, conn):
-        # call this from outside when you have a SpecConnection
-        if hasattr(self, "liveView") and hasattr(self.liveView, "set_connection"):
-            self.liveView.set_connection(conn)
+        self._conn = conn
+        if self._scan_timer is None:
+            self._scan_timer = QTimer(self)
+            self._scan_timer.timeout.connect(self._update_scan_table_from_conn)
+            self._scan_timer.start(500)
+        # initial populate
+        self._update_scan_table_from_conn()
 
+    def setScanData(self, columns, data):
+        """Populate/refresh the Current Scan table using arrays."""
+        if not columns or not data:
+            self.scanTable.clear()
+            self.scanTable.setRowCount(0)
+            self.scanTable.setColumnCount(0)
+            return
 
+        rows, cols = len(data), len(columns)
+        self.scanTable.setColumnCount(cols)
+        self.scanTable.setHorizontalHeaderLabels([str(c) for c in columns])
+
+        # Fast path: grow/shrink rows only when needed
+        self.scanTable.setRowCount(rows)
+        for r in range(rows):
+            row = data[r]
+            for c in range(cols):
+                try:
+                    val = row[c]
+                except Exception:
+                    val = ""
+                if isinstance(val, float):
+                    text = f"{val:.6g}"
+                elif isinstance(val, int):
+                    text = str(val)
+                else:
+                    text = "" if val is None else str(val)
+                it = QTableWidgetItem(text)
+                it.setTextAlignment(Qt.AlignCenter)
+                self.scanTable.setItem(r, c, it)
+
+        self.scanTable.resizeColumnsToContents()
+
+    def _update_scan_table_from_conn(self):
+        if self._conn is None:
+            return
+        try:
+            columns = getattr(self._conn, "scan_columns", None)
+            data    = getattr(self._conn, "scan_data", None)
+
+            # handle numpy arrays or lists safely
+            has_cols = columns is not None and len(columns) > 0
+            has_data = data is not None and len(data) > 0
+
+            if has_cols and has_data:
+                self.setScanData(columns, data)
+        except Exception as e:
+            log.log(2, f"_update_scan_table_from_conn failed: {e}")
+
+    # ---- metadata setters (unchanged behavior) ----
     def setMetadata(self, data):
-
         if "scanno" in data:
             no = str(data["scanno"])
             if "order" in data:
@@ -201,7 +338,6 @@ class ScanMetadataWidget(QWidget):
             no = "<b>" + no + "</b>"
             if "noinfile" in data:
                 no += " (%s)" % data["noinfile"]
-
             self.scanno = no
             self.scanNoValue.setText(no)
 
@@ -260,128 +396,130 @@ class ScanMetadataWidget(QWidget):
             self.setMore(None)
 
     def setHKL(self, value):
-        if value is not None:
+        showit = value is not None
+        if showit:
             self.hklValue.setText(value)
-            showit = True
-        else:
-            showit = False
-
         if showit and not self.showingHKL:
             self.hklLabel.show()
             self.hklValue.show()
         elif not showit and self.showingHKL:
             self.hklLabel.hide()
             self.hklValue.hide()
-
         self.showingHKL = showit
 
     def setPoints(self, value):
-        if value is not None:
-            self.pointsValue.setText(str(value))
-        else:
-            self.pointsValue.setText("")
+        self.pointsValue.setText("" if value is None else str(value))
 
     def setColumns(self, value):
-        if value is not None:
-            self.columnsValue.setText(str(value))
-        else:
-            self.columnsValue.setText("")
+        self.columnsValue.setText("" if value is None else str(value))
 
     def setMotorMnemonics(self, mnes):
         if not mnes:
             self.has_motmnes = False
-            return
         else:
             self.motmnes = mnes
             self.has_motmnes = True
 
     def setMotors(self, motors):
-
         self.motorTreeWidget.clear()
-
         if not motors:
             return
 
         if self.has_motmnes:
-            if len(motors) != len(self.motmnes):
-                return
             self.motorTreeWidget.setColumnCount(3)
-            self.motorTreeWidget.setHeaderLabels(["Mne", "Name", "Position"])
-            self.motorTreeWidget.setRootIsDecorated(False)
+            self.motorTreeWidget.setHeaderLabels(["Motor", "Mnemonic", "Pos"])
         else:
             self.motorTreeWidget.setColumnCount(2)
-            self.motorTreeWidget.setHeaderLabels(["Name", "Position"])
-            self.motorTreeWidget.setRootIsDecorated(False)
+            self.motorTreeWidget.setHeaderLabels(["Motor", "Pos"])
 
-        for mnum in range(len(motors)):
-            name, motorpos = motors[mnum]
+        header = self.motorTreeWidget.header()
+        # Stretch name like MotorTable; keep mnemonic/pos snug
+        if self.has_motmnes:
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(0, QHeaderView.Stretch)          # Motor (full name)
+            header.setSectionResizeMode(1, QHeaderView.ResizeToContents) # Mnemonic
+            header.setSectionResizeMode(2, QHeaderView.ResizeToContents) # Pos
+        else:
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(0, QHeaderView.Stretch)          # Motor
+            header.setSectionResizeMode(1, QHeaderView.ResizeToContents) # Pos
+
+        for idx, entry in enumerate(motors):
             if self.has_motmnes:
-                mne = self.motmnes[mnum]
-                item = QTreeWidgetItem([mne, name, motorpos])
+                name, pos = entry
+                mne = self.motmnes[idx] if idx < len(self.motmnes) else ""
+                try:
+                    pos_txt = f"{float(pos):.3f}"
+                except Exception:
+                    pos_txt = "—"
+
+                item = QTreeWidgetItem([name, mne, pos_txt])
+                item.setTextAlignment(0, Qt.AlignLeft  | Qt.AlignVCenter)
+                item.setTextAlignment(1, Qt.AlignCenter)
+                item.setTextAlignment(2, Qt.AlignCenter)
             else:
-                item = QTreeWidgetItem([name, motorpos])
+                name, pos = entry
+                try:
+                    pos_txt = f"{float(pos):.3f}"
+                except Exception:
+                    pos_txt = "—"
+
+                item = QTreeWidgetItem([name, pos_txt])
+                item.setTextAlignment(0, Qt.AlignLeft  | Qt.AlignVCenter)
+                item.setTextAlignment(1, Qt.AlignCenter)
+
             self.motorTreeWidget.addTopLevelItem(item)
 
-        self.motorTreeWidget.resizeColumnToContents(0)
-        if self.has_motmnes:
-            self.motorTreeWidget.resizeColumnToContents(1)
-
     def setComments(self, comments):
-        if comments is not None:
-            txtstr = ""
-            for comment in comments:
-                txtstr += "<b>-</b>" + comment + "<br>"
+        showit = comments is not None
+        if showit:
+            txtstr = "".join("<b>-</b>" + c + "<br>" for c in comments)
             self.commentsArea.setText(txtstr)
-            showit = True
-        else:
-            showit = False
 
+        # keep tab visibility in sync
         if showit and not self.showingComments:
-            self.infoTabs.insertTab(1, self.commentsArea, "Comments")
+            self.infoTabs.insertTab(2, self.commentsArea, "Comments")
         elif not showit and self.showingComments:
-            self.infoTabs.removeTab(1)
-
+            idx = self.infoTabs.indexOf(self.commentsArea)
+            if idx != -1:
+                self.infoTabs.removeTab(idx)
         self.showingComments = showit
 
     def setMessages(self, messages):
-
-        if messages is not None:
-
+        showit = messages is not None
+        if showit:
             self.messageTreeWidget.clear()
-            self.messageTreeWidget.setColumnCount(1)
+            self.messageTreeWidget.setColumnCount(3)  # fixed: 3 headers -> 3 columns
             self.messageTreeWidget.setHeaderLabels(["ID", "Loc", "Message"])
             self.messageTreeWidget.setRootIsDecorated(False)
 
             for msg in messages:
                 try:
                     _id, _loc, _msg = msg
-                    item = QTreeWidgetItem(list(map(str,msg)))
-                    item.setToolTip(2, _msg)
+                    item = QTreeWidgetItem([str(_id), str(_loc), str(_msg)])
+                    item.setToolTip(2, str(_msg))
                     self.messageTreeWidget.addTopLevelItem(item)
                 except ValueError:
-                    log.log(2,
-                        "Error message is wrongly formatted (should be [id,locator,msg]. %s " % str(msg))
+                    log.log(2, "Error message is wrongly formatted (should be [id,locator,msg]. %s " % str(msg))
+
             self.messageTreeWidget.resizeColumnToContents(0)
             self.messageTreeWidget.resizeColumnToContents(1)
-            showit = True
-        else:
-            showit = False
 
+        # toggle Messages tab if needed
         if showit != self.showingMessages:
             if showit:
-                icondir = os.path.join(os.path.dirname(__file__), 'icons')
                 self.infoTabs.addTab(self.messageArea, icons.get_icon('attention'), "Messages")
                 idx = self.infoTabs.indexOf(self.messageArea)
                 self.infoTabs.setCurrentIndex(idx)
             else:
                 idx = self.infoTabs.indexOf(self.messageArea)
-                self.infoTabs.removeTab(idx)
-
+                if idx != -1:
+                    self.infoTabs.removeTab(idx)
         self.showingMessages = showit
 
     def setMore(self, messages):
-
-        if messages is not None:
+        showit = messages is not None
+        if showit:
             self.moreTreeWidget.clear()
             self.moreTreeWidget.setColumnCount(1)
             self.moreTreeWidget.header().close()
@@ -392,28 +530,24 @@ class ScanMetadataWidget(QWidget):
                     subitem = QTreeWidgetItem([str(msg)])
                     subitem.setToolTip(0, str(msg))
                     item.addChild(subitem)
-            showit = True
-        else:
-            showit = False
 
         if showit != self.showingMore:
             if showit:
                 self.infoTabs.addTab(self.moreArea, "More...")
-                idx = self.infoTabs.indexOf(self.moreArea)
             else:
                 idx = self.infoTabs.indexOf(self.moreArea)
-                self.infoTabs.removeTab(idx)
-
+                if idx != -1:
+                    self.infoTabs.removeTab(idx)
         self.showingMore = showit
 
+    # Only used if someone plugs something else in later; safe no-op otherwise
     def setHeaderContent(self, data):
+        # headerArea is not part of this widget; left for compatibility
+        pass
 
-        self.headerArea.setText("hi there")
 
 if __name__ == '__main__':
-
     from pyspec.file.spec import FileSpec
-    import sys
 
     filename = sys.argv[1]
     scanno = int(sys.argv[2])
@@ -425,13 +559,10 @@ if __name__ == '__main__':
     win = QMainWindow()
     wid = ScanMetadataWidget(win)
 
-    print(scan.getMeta())
-
     wid.setMetadata(scan.getMeta())
     win.setWindowTitle('Scan Meta Data')
-
     win.setCentralWidget(wid)
-    win.setGeometry(200, 100, 400, 400)
+    win.setGeometry(200, 100, 600, 500)
     win.show()
 
     sys.exit(app.exec_())

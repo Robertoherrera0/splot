@@ -126,6 +126,7 @@ from StopButton import StopButton
 #         motorLayout.addWidget(self.mspacer)
 
 #         self.update()
+
 class MotorWidget(QWidget):
     def __init__(self, motmne=None, spec=None, *args):
         super().__init__()
@@ -166,6 +167,10 @@ class MotorWidget(QWidget):
         self.modeCombo.addItem("Relative", userData="relative")
         self.modeCombo.currentIndexChanged.connect(self._modeChanged)
 
+        # but HIDE it by default so it doesn’t appear in the row
+        self.modeCombo.hide()
+
+
         self.moveValue = QLineEdit()
         self.moveValue.setFixedWidth(70)
         self.moveValue.returnPressed.connect(self.doMove)
@@ -186,10 +191,10 @@ class MotorWidget(QWidget):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        # Layout: (Label) (Curr?) (Mode dropdown) (Input) (Go) (Cancel) ......
+        # Layout
         motorLayout.addWidget(self.motorLabel)
         motorLayout.addWidget(self.currentLabel)
-        motorLayout.addWidget(self.modeCombo)
+        # motorLayout.addWidget(self.modeCombo)
         motorLayout.addWidget(self.moveValue)
         motorLayout.addWidget(self.goButton)
         motorLayout.addWidget(self.cancelButton)
@@ -205,8 +210,11 @@ class MotorWidget(QWidget):
         self.update()
 
     # --- Mode handling ---
-    def _modeChanged(self, idx: int):
-        self.setMoveMode(self.modeCombo.itemData(idx) or "absolute")
+    def _modeChanged(self, mode: str):
+        # normalize and remember
+        self._current_move_mode = "relative" if str(mode).lower().startswith("rel") else "absolute"
+        if self.motorWidget is not None and hasattr(self.motorWidget, "setMoveMode"):
+            self.motorWidget.setMoveMode(self._current_move_mode)
 
     def setMoveMode(self, mode: str):
         self.move_mode = "relative" if (mode or "").lower().startswith("rel") else "absolute"

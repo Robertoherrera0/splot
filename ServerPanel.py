@@ -1384,8 +1384,18 @@ class MoveWidget(QWidget):
         self.motorCombo = QComboBox()
         self.motorCombo.currentIndexChanged.connect(self._motorChanged)
 
+        self.modeCombo = QComboBox()
+        self.modeCombo.addItem("Absolute", userData="absolute")
+        self.modeCombo.addItem("Relative", userData="relative")
+        self.modeCombo.setCurrentIndex(0)
+        self._current_move_mode = "absolute"
+        self.modeCombo.currentIndexChanged.connect(
+            lambda idx: self._modeChanged(self.modeCombo.itemData(idx))
+        )
+
         headerLayout.addWidget(self.motorHeadL)
         headerLayout.addWidget(self.motorCombo)
+        headerLayout.addWidget(self.modeCombo) 
 
         # # Input + Move button
         # self.posInput = QLineEdit()
@@ -1502,6 +1512,12 @@ class MoveWidget(QWidget):
                 self.motorWidget.show()
 
         self.selected_motor = motormne
+       
+
+        current_mode = getattr(self, "_current_move_mode", "absolute")
+        if self.motorWidget is not None and hasattr(self.motorWidget, "setMoveMode"):
+            self.motorWidget.setMoveMode(current_mode)
+
         self._update()
         self.blockSignals(False)
 
@@ -1538,6 +1554,15 @@ class MoveWidget(QWidget):
             return
         cmd = f"umv {self.selected_motor} {val}"
         self._send(cmd)
+
+    # inside class MoveWidget
+    def _modeChanged(self, mode):
+        # remember current header mode
+        self._current_move_mode = "relative" if str(mode).lower().startswith("rel") else "absolute"
+        # push it into the currently displayed MotorWidget
+        if self.motorWidget is not None and hasattr(self.motorWidget, "setMoveMode"):
+            self.motorWidget.setMoveMode(self._current_move_mode)
+
 
     def _send(self, cmd: str):
         try:

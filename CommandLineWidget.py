@@ -50,9 +50,9 @@ class CommandLineWidget(QFrame):
         row.setContentsMargins(8, 2, 8, 2)  # was (8,4,8,4)
         row.setSpacing(0)
 
-        self.prompt = QLabel("TWOC›")
+        self.prompt = QLabel("")
         self.prompt.setStyleSheet("color:#666; padding-right:8px;")
-        row.addWidget(self.prompt, 0, Qt.AlignVCenter)
+        # row.addWidget(self.prompt, 0, Qt.AlignVCenter)
 
         self.input = QLineEdit()
         self.input.setObjectName("CmdInput")
@@ -66,7 +66,7 @@ class CommandLineWidget(QFrame):
         self.hist_btn.setPopupMode(QToolButton.InstantPopup)
         self.hist_menu = QMenu(self.hist_btn)
         self.hist_btn.setMenu(self.hist_menu)
-        row.addWidget(self.hist_btn, 0)
+        # row.addWidget(self.hist_btn, 0)
 
         self.send_btn = QPushButton("Send")
         self.send_btn.setObjectName("SendBtn")
