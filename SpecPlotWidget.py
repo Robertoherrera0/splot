@@ -255,13 +255,13 @@ class SpecPlotWidget(QWidget):
 
         self.abortButton.clicked.connect(self.abort)
 
-        self.sourceLabelAction = self.toolbar.addWidget(self.sourceNameLabel)
-        self.sourceNameAction = self.toolbar.addWidget(self.sourceNameValue)
+        # self.sourceLabelAction = self.toolbar.addWidget(self.sourceNameLabel)
+        # self.sourceNameAction = self.toolbar.addWidget(self.sourceNameValue)
         self.serverStateAction = self.toolbar.addWidget(self.serverStateLabel)
         self.abortButtonAction = self.toolbar.addWidget(self.abortButton)
 
-        self.sourceLabelAction.setVisible(False)
-        self.sourceNameAction.setVisible(False)
+        # self.sourceLabelAction.setVisible(False)
+        # self.sourceNameAction.setVisible(False)
         self.serverStateAction.setVisible(False)
         self.abortButtonAction.setVisible(False)
 
@@ -344,11 +344,12 @@ class SpecPlotWidget(QWidget):
     def setTitle(self, title=None):
         if title:
             self.sourceNameValue.setText(title)
-            self.sourceLabelAction.setVisible(True)
-            self.sourceNameAction.setVisible(True)
+            # self.sourceLabelAction.setVisible(True)
+            # self.sourceNameAction.setVisible(True)
         else:
-            self.sourceNameAction.setVisible(False)
-            self.sourceLabelAction.setVisible(False)
+            return
+            # self.sourceNameAction.setVisible(False)
+            # self.sourceLabelAction.setVisible(False)
 
     def setSourceType(self, sourcetype): 
         self.sourcetype = sourcetype

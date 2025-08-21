@@ -535,7 +535,7 @@ def run_app(servkey="splot_embedded", connectpars="localhost:fourc", winname="SP
     win.set_command_server(cmdsrv)
     win_id = win.winId()
 
-    # ⬇️ mount menus onto host menubar if provided
+    # mount menus onto host menubar if provided
     if host_menubar is not None:
         try:
             win.use_external_menubar(host_menubar)
@@ -555,7 +555,7 @@ def run_app(servkey="splot_embedded", connectpars="localhost:fourc", winname="SP
     timer.timeout.connect(update_cmdserver)
     timer.start(CMDSERVER_INTERVAL)
 
-    return win.centralWidget(), app
+    return win.centralWidget(), app, win
 
 
 
