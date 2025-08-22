@@ -2553,12 +2553,12 @@ class SpecPlotMatplotlib(QWidget, SpecPlotBaseClass):
         for name, curve in self.curves.items():
             curve.plot()
         # added
-        # if self.showing_grid:
-        #     self.canvas.show_grid(True)
-        # else:
-        #     self.canvas.show_grid(False)
+        if self.showing_grid:
+            self.canvas.show_grid(True)
+        else:
+            self.canvas.show_grid(False)
 
-        self.canvas.show_grid(True)
+        # self.canvas.show_grid(True)
 
         self.canvas.set_xlog(self.xlog)
         self.canvas.set_y1log(self.y1log)

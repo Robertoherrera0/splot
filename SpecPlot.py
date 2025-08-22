@@ -37,8 +37,10 @@
 from pyspec.graphics.QVariant import *
 from pyspec.graphics import mpl_imported
 
-if mpl_imported():
-    from SpecPlotMatplotlib import SpecPlotMatplotlib as SpecPlot
-else:
-    from SpecPlotQwt import SpecPlotQwt as SpecPlot
+from SpecPlotPlotly import SpecPlotPlotly as SpecPlot
+
+# if mpl_imported():
+#     from SpecPlotMatplotlib import SpecPlotMatplotlib as SpecPlot
+# else:
+#     from SpecPlotQwt import SpecPlotQwt as SpecPlot
 
