@@ -9,14 +9,8 @@ import json
 import weakref
 import numpy as np
 import os
-# force software paths for GL/Chromium in QtWebEngine
-os.environ.setdefault("QT_OPENGL", "software")
-os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
-# disable GPU and compositing in Chromium
-os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS",
-                      "--disable-gpu --disable-gpu-compositing --disable-zero-copy --no-sandbox")
-# optional (helps on some builds):
-os.environ.setdefault("QT_QUICK_BACKEND", "software")
+import tempfile, pathlib
+from PySide6.QtCore import QUrl
 
 
 from PySide6.QtCore import Qt, Signal, Slot, QObject, QTimer
@@ -103,155 +97,136 @@ class _PlotlyCanvas:
 
     def _flush_if_ready(self):
         """If renderFigure exists and we have a pending payload, push it.
-           Otherwise, re-check soon (keeps trying)."""
+        Safe against re-entrancy / multiple callbacks."""
         if not self._pending:
-            # still useful to see if the JS is alive
-            self.web.page().runJavaScript(
-                "console.log('probe: typeof window.renderFigure =', typeof window.renderFigure);"
-            )
+            # still useful to probe JS side
+            self.web.page().runJavaScript("typeof window.renderFigure === 'function'", lambda *_: None)
             return
 
         def _cb(has_fn):
+            # another run may have flushed while we waited
+            payload = self._pending
+            if not payload:
+                return
             if has_fn:
-                figJSON, cfgJSON = self._pending
-                print("[PLOT] renderFigure present; flushing payload")
-                # clear AFTER success path
+                figJSON, cfgJSON = payload
+                # clear after we've copied the payload
                 self._pending = None
                 self.web.page().runJavaScript(
-                    f"window.renderFigure({json.dumps(figJSON)}, {json.dumps(cfgJSON)});"
+                    f"window.renderFigure({json.dumps(figJSON)}, {json.dumps(cfgJSON)})"
                 )
             else:
-                # try again shortly; we also log this fact
-                print("[PLOT] renderFigure not ready; will retry…")
+                # try again shortly
                 QTimer.singleShot(80, self._flush_if_ready)
 
         self.web.page().runJavaScript("typeof window.renderFigure === 'function'", _cb)
 
     def _init_html(self):
-        # Inline plotly if possible; otherwise use CDN
+        # Keep a temp dir alive for the life of the view
+        self._tmpdir = pathlib.Path(tempfile.mkdtemp(prefix="splot_plotly_"))
+
+        # Write the Plotly bundle next to the HTML (so we don’t inline it)
         try:
             from plotly.offline import get_plotlyjs
-            plotly_js = get_plotlyjs()
-            plotly_tag = f"<script>{plotly_js}</script>"
-            print("[PLOT] Using inline Plotly bundle")
+            (self._tmpdir / "plotly.min.js").write_text(get_plotlyjs(), encoding="utf-8")
+            plotly_tag = '<script src="plotly.min.js"></script>'
+            print("[PLOT] Using local Plotly bundle")
         except Exception as e:
-            print(f"[PLOT] Inline Plotly unavailable: {e}; falling back to CDN")
+            print(f"[PLOT] Could not get local plotlyjs: {e}; using CDN")
             plotly_tag = '<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>'
 
-        html = f"""
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-{plotly_tag}
-<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
-<style>
-  html, body, #plot {{ height:100%; width:100%; margin:0; padding:0; background:#fff; }}
-  #plot {{ border:1px dashed #999; }}
-</style>
-</head>
-<body>
-<div id="plot"></div>
-<script>
-(function() {{
-  // (A) Define renderFigure FIRST, globally.
-  window.renderFigure = function(figJSON, configJSON) {{
-    try {{
-      const fig = JSON.parse(figJSON);
-      const cfg = JSON.parse(configJSON);
-      if (typeof Plotly === 'undefined') {{
-        console.error('Plotly missing');
-        return;
-      }}
-      console.log('renderFigure: calling Plotly.react…');
-      Plotly.react('plot', fig.data, fig.layout, cfg);
-
-      const plot = document.getElementById('plot');
-      if (plot && plot.removeAllListeners) plot.removeAllListeners();
-
-      function getXLabel(f) {{
+        html = f"""<!doctype html>
+    <html>
+    <head>
+    <meta charset="utf-8"/>
+    {plotly_tag}
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <style>html,body,#plot{{height:100%;width:100%;margin:0}}</style>
+    </head>
+    <body>
+    <div id="plot"></div>
+    <script>
+        // Define renderFigure first so Python can call it at any time
+        window.renderFigure = function(figJSON, cfgJSON) {{
         try {{
-          return (f && f.layout && f.layout.xaxis && f.layout.xaxis.title && f.layout.xaxis.title.text)
-                 ? f.layout.xaxis.title.text : '';
-        }} catch (e) {{ return ''; }}
-      }}
+            const fig = JSON.parse(figJSON);
+            const cfg = JSON.parse(cfgJSON);
+            Plotly.react('plot', fig.data, fig.layout, cfg);
 
-      plot.on('plotly_click', function(e) {{
-        if (!window.qt_bridge || !e || !e.points || !e.points.length) return;
-        const p = e.points[0];
-        const x = (typeof p.x === 'number') ? p.x : parseFloat(p.x);
-        if (!isNaN(x)) window.qt_bridge.emitPointSelected(getXLabel(fig), x);
-      }});
+            const plot = document.getElementById('plot');
+            if (plot && plot.removeAllListeners) plot.removeAllListeners();
 
-      plot.on('plotly_selected', function(e) {{
-        if (!window.qt_bridge || !e || !e.range || !e.range.x) return;
-        const x0 = parseFloat(e.range.x[0]), x1 = parseFloat(e.range.x[1]);
-        if (!isNaN(x0) && !isNaN(x1)) window.qt_bridge.emitRegionSelected(getXLabel(fig), x0, x1);
-      }});
-      console.log('renderFigure: done.');
-    }} catch (err) {{
-      console.error('renderFigure error:', err);
-    }}
-  }};
+            function xLabel(f) {{
+            return f?.layout?.xaxis?.title?.text || '';
+            }}
 
-  // (B) Init QWebChannel AFTER defining renderFigure (so Python can call it any time)
-  window.qt_bridge = null;
+            plot.on('plotly_click', (e) => {{
+            if (!window.qt_bridge || !e?.points?.length) return;
+            const x = parseFloat(e.points[0].x);
+            if (!Number.isNaN(x)) window.qt_bridge.emitPointSelected(xLabel(fig), x);
+            }});
+            plot.on('plotly_selected', (e) => {{
+            if (!window.qt_bridge || !e?.range?.x) return;
+            const [x0, x1] = e.range.x.map(parseFloat);
+            if (!Number.isNaN(x0) && !Number.isNaN(x1))
+                window.qt_bridge.emitRegionSelected(xLabel(fig), x0, x1);
+            }});
+            console.log('renderFigure: done');
+        }} catch (err) {{
+            console.error('renderFigure error:', err);
+        }}
+        }};
 
-  function waitFor(check, done) {{
-    if (check()) return done();
-    setTimeout(function() {{ waitFor(check, done); }}, 40);
-  }}
-
-  waitFor(
-    function() {{ return !!(window.qt && window.qt.webChannelTransport && window.QWebChannel); }},
-    function() {{
-      try {{
-        new QWebChannel(qt.webChannelTransport, function(channel) {{
-          window.qt_bridge = channel.objects.qt_bridge || null;
-          console.log('qt webchannel ready');
+        // WebChannel after defining renderFigure
+        new QWebChannel(qt.webChannelTransport, (channel) => {{
+        window.qt_bridge = channel.objects.qt_bridge || null;
+        console.log('qt webchannel ready');
         }});
-      }} catch (e) {{
-        console.error('QWebChannel init failed:', e);
-      }}
-    }}
-  );
+    </script>
+    </body>
+    </html>"""
 
-  console.log('page bootstrap complete; typeof Plotly =', typeof Plotly);
-}})();
-</script>
-</body>
-</html>
-"""
-        # IMPORTANT: give a baseUrl so the qrc:/// script always resolves
-        self.web.setHtml(html, baseUrl=QUrl("qrc:///"))
+        index_path = self._tmpdir / "index.html"
+        index_path.write_text(html, encoding="utf-8")
+        self.web.load(QUrl.fromLocalFile(str(index_path)))
+    # ---- Shapes / annotations management ----
+    def add_shape(self, shape: dict):
+        self._shapes.append(shape)
 
-    def render(self, fig: go.Figure, config: dict | None = None):
-        # strip 'meta' (invalid for shapes/annotations)
+    def remove_shapes_with_meta(self, meta_id: str):
+        self._shapes = [s for s in self._shapes if s.get("meta") != meta_id]
+
+    def add_annotation(self, ann: dict):
+        self._annotations.append(ann)
+
+    def remove_annotations_with_meta(self, meta_id: str):
+        self._annotations = [a for a in self._annotations if a.get("meta") != meta_id]
+
+    # ---- Push a figure into the page ----
+    def render(self, fig, config=None):
+        # merge any queued shapes/annotations
         clean_shapes = [{k: v for k, v in s.items() if k != "meta"} for s in self._shapes]
-        clean_ann   = [{k: v for k, v in a.items() if k != "meta"} for a in self._annotations]
+        clean_ann    = [{k: v for k, v in a.items() if k != "meta"} for a in self._annotations]
 
-        if clean_shapes: fig.update_layout(shapes=clean_shapes)
-        else:            fig.layout.shapes = ()
-        if clean_ann:    fig.update_layout(annotations=clean_ann)
-        else:            fig.layout.annotations = ()
+        if clean_shapes:
+            fig.update_layout(shapes=clean_shapes)
+        else:
+            fig.layout.shapes = ()
+
+        if clean_ann:
+            fig.update_layout(annotations=clean_ann)
+        else:
+            fig.layout.annotations = ()
 
         figJSON = fig.to_json()
         cfgJSON = json.dumps(config if config is not None else self._config)
 
-        # always store latest; flush when JS is ready
+        # store latest payload; flush when JS is ready
         self._pending = (figJSON, cfgJSON)
         if not self._ready:
             print("[PLOT] page not ready; queued payload")
             return
         self._flush_if_ready()
-
-    # ---- Shapes / annotations management ----
-    def add_shape(self, shape: dict): self._shapes.append(shape)
-    def remove_shapes_with_meta(self, meta_id: str):
-        self._shapes = [s for s in self._shapes if s.get("meta") != meta_id]
-    def add_annotation(self, ann: dict): self._annotations.append(ann)
-    def remove_annotations_with_meta(self, meta_id: str):
-        self._annotations = [a for a in self._annotations if a.get("meta") != meta_id]
 
 # ------------------------- Curve (trace) wrapper -------------------------
 
