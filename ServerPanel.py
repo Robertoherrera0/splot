@@ -1329,8 +1329,10 @@ from PySide6.QtCore import Qt
 import weakref
 
 
+# ServerPanel.py (or wherever MoveWidget is defined)
 class MoveWidget(QWidget):
-    def __init__(self, *args):
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
         self.conn = None
         self.datasource_ref = None
@@ -1351,34 +1353,23 @@ class MoveWidget(QWidget):
         self.detLabel = QLabel("")
         self.detLabel.setMinimumWidth(0)
 
-
-        QWidget.__init__(self, *args)
-        self.moveLayout = QVBoxLayout()
-        self.setLayout(self.moveLayout)
-
+        # layout: parented in ctor to avoid setLayout later
+        self.moveLayout = QVBoxLayout(self)
         headerLayout = QHBoxLayout()
         headerLayout.setSpacing(2)
         headerLayout.setContentsMargins(1, 1, 1, 1)
         headerLayout.setAlignment(Qt.AlignLeading | Qt.AlignLeft | Qt.AlignVCenter)
 
-        # Try to create motorWidget
+        # Safe MotorWidget creation (give it a parent)
         try:
-            self.motorWidget = MotorWidget()
+            self.motorWidget = MotorWidget(parent=self)
         except Exception as e:
             print("⚠ Failed to create MotorWidget:", e)
             self.motorWidget = None
 
-        # New move row (replaces PEAK/COM/CFWHM)
-        # moveRow = QHBoxLayout()
-        # moveRow.setSpacing(4)
-        # moveRow.setContentsMargins(1, 1, 1, 1)
-        # moveRow.addWidget(self.detLabel)
-
-
         self.moveLayout.addLayout(headerLayout)
         if self.motorWidget is not None:
             self.moveLayout.addWidget(self.motorWidget)
-        # self.moveLayout.addLayout(moveRow)
 
         self.motorHeadL = QLabel("Motor:")
         self.motorCombo = QComboBox()
@@ -1501,15 +1492,30 @@ class MoveWidget(QWidget):
                 except Exception:
                     mw = None
 
-            # Replace the inline widget, but don't break selection if unavailable
-            if self.motorWidget is not None:
+        # Replace the inline widget safely
+        if self.motorWidget is not None:
+            self.motorWidget.hide()
+            self.moveLayout.removeWidget(self.motorWidget)
+
+        self.motorWidget = mw or getattr(self, "emptyMotorWidget", None)
+        if self.motorWidget is not None:
+            # If it arrived already visible as a top-level, hide first
+            if self.motorWidget.isVisible():
                 self.motorWidget.hide()
-                self.moveLayout.removeWidget(self.motorWidget)
-            self.motorWidget = mw or getattr(self, "emptyMotorWidget", None)
-            if self.motorWidget is not None:
-                self.moveLayout.insertWidget(1, self.motorWidget)
-                self.motorWidget.setDisabled(False)
-                self.motorWidget.show()
+
+            # Nuke any top-level flags and native window; make it a child widget
+            self.motorWidget.setWindowFlags(Qt.Widget)              # <- critical (not setWindowFlag)
+            self.motorWidget.setAttribute(Qt.WA_NativeWindow, False)
+            self.motorWidget.setWindowModality(Qt.NonModal)
+
+            # Reparent BEFORE showing
+            self.motorWidget.setParent(self)
+
+            # Now insert and show embedded
+            self.moveLayout.insertWidget(1, self.motorWidget)
+            self.motorWidget.setVisible(True)
+            self.motorWidget.setDisabled(False)
+
 
         self.selected_motor = motormne
        
@@ -1606,11 +1612,11 @@ class ServerPanel(QWidget):
         layout.addWidget(scanGroup)
 
         # Move group
-        moveLayout = QVBoxLayout()
+        moveLayout = QVBoxLayout(self)
         moveGroup.setLayout(moveLayout)
         moveGroup.setFlat(False)
 
-        self.moveWidget = MoveWidget()
+        self.moveWidget = MoveWidget(parent=self)
         moveLayout.addWidget(self.moveWidget)
 
         moveLayout.setSpacing(0)

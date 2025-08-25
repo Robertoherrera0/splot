@@ -212,8 +212,8 @@ class SpecDataSource(DataSource1D):
         self.topLayout.addWidget(self.statusValue)
         self.topLayout.addWidget(self.spacer)
 
-        self.topWidget.setLayout(self.topLayout)
-        self.set_source_header_widget(self.topWidget)
+        # self.topWidget.setLayout(self.topLayout)
+        # self.set_source_header_widget(self.topWidget)
 
         self.serverPanel = ServerPanel()
         self.statusDisconnected()

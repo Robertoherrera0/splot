@@ -83,7 +83,9 @@ if mpl_imported():
 else:
     log.log(3,"matplotlib can not be imported")
     setFeature("2D", False)
- 
+
+from PySide6.QtWidgets import QMenu, QToolButton, QMessageBox
+
 
 # Orientation = [QPrinter.Portrait, QPrinter.Landscape]
 
@@ -161,16 +163,17 @@ class SpecPlotWidget(QWidget):
         bottomLayout.setSpacing(0)
 
         self.setLayout(layout)
+        # layout.addLayout(toolLayout)
+        # layout.addLayout(topLayout)
+        # layout.addLayout(bottomLayout)
         layout.addLayout(toolLayout)
         layout.addLayout(topLayout)
         layout.addLayout(bottomLayout)
 
         self.toolbar = QToolBar()
         self.toolbar.setIconSize(QSize(18, 18))
-        #self.toolbar.setStyleSheet('border-style: solid; border-width: 1px; border-radius: 5px;')
 
-        icondir = os.path.join(os.path.dirname(__file__),'icons')
-
+        # --- create the legacy actions (we won't add them to the toolbar) ---
         self.selectModeAction = QAction(icons.get_icon('pointer'), "Crosshairs", self)
         self.selectModeAction.triggered.connect(self.selectMode)
         self.selectModeAction.setCheckable(True)
@@ -198,24 +201,46 @@ class SpecPlotWidget(QWidget):
         self.zoominAction.triggered.connect(self.zoomIn)
         self.zoominAction.setEnabled(False)
 
+        # --- the only two things we actually show: FIT menu + PRINT ---
+        # Fit dropdown (default click runs Gaussian)
+        self.fitButton = QToolButton(self)
+        self.fitButton.setIcon(icons.get_icon('fit'))   # fit.svg in icons/
+        self.fitButton.setToolTip("Fit data")
+        self.fitButton.setPopupMode(QToolButton.MenuButtonPopup)
+
+        fitMenu = QMenu(self.fitButton)
+        act_gauss = fitMenu.addAction("Gaussian")
+        act_hill  = fitMenu.addAction("Hill")
+        fitMenu.addSeparator()
+        act_clear = fitMenu.addAction("Clear fit")
+
+        act_gauss.triggered.connect(lambda: self._do_fit("gaussian"))
+        act_hill.triggered.connect(lambda: self._do_fit("hill"))
+        act_clear.triggered.connect(self._clear_fit_overlays)
+
+        self.fitButton.setMenu(fitMenu)
+        self.fitButton.clicked.connect(lambda: self._do_fit("gaussian"))  # default action on button click
+
+        # Stats toggle (show/hide header & in-plot stats/markers)
+        self.statsAction = QAction(icons.get_icon('stats'), "Show stats", self)
+        self.statsAction.setCheckable(True)
+        self.statsAction.setChecked(True)
+        self.statsAction.toggled.connect(self._set_stats_visible)
+
+        # Add to toolbar
+        self.toolbar.addAction(self.statsAction)
+
+        # Printer
         self.printAction = QAction(icons.get_icon('printer'), "Print", self)
         self.printAction.setStatusTip('Print Plot')
         self.printAction.triggered.connect(self.printPlot)
 
-        self.toolbar.addAction(self.selectModeAction)
-        self.toolbar.addSeparator()
-        self.toolbar.addAction(self.regionModeAction)
-        self.toolbar.addAction(self.regionOutAction)
-        self.toolbar.addSeparator()
-        self.toolbar.addAction(self.zoomModeAction)
-        self.toolbar.addAction(self.zoomoutAction)
-        self.toolbar.addAction(self.zoominAction)
-        #self.toolbar.addAction(self.zoomresetAction)
+        # Add only the two visible controls
+        self.toolbar.addWidget(self.fitButton)
         self.toolbar.addSeparator()
         self.toolbar.addAction(self.printAction)
 
-        self.toolbar.addSeparator()
-
+        # spacer (keeps server state / abort on the right, same as before)
         self.spacer = QWidget()
         if qt_variant() in ["PyQt6", "PySide6"]:
             from pyspec.graphics.QVariant import QSizePolicy_
@@ -225,6 +250,7 @@ class SpecPlotWidget(QWidget):
         spol.setHorizontalPolicy(QSizePolicy.Expanding)
         self.spacer.setSizePolicy(spol)
         self.toolbar.addWidget(self.spacer)
+
 
         self.sourceNameLabel = QLabel("Source: ")
         self.sourceNameLabel.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -239,6 +265,8 @@ class SpecPlotWidget(QWidget):
         except AttributeError:
             self.serverStateLabel.setAlignment(Qt.AlignHCenter)
         self.serverStateLabel.setFixedWidth(90)
+        self.serverStateLabel.setFixedHeight(28)
+        self.serverStateLabel.setMinimumWidth(120)
         self.serverStateLabel.setObjectName("sourcestate")
 
         icondir = os.path.join(os.path.dirname(__file__),'icons')
@@ -250,8 +278,8 @@ class SpecPlotWidget(QWidget):
         self.abortButton.setEnabled(False)
         self.abortButton.setObjectName("abortbutton")
 
-        self.abortButton.setFixedWidth(60)
-        self.abortButton.setFixedHeight(32)
+        self.abortButton.setFixedHeight(28)
+        self.abortButton.setFixedWidth(45)
 
         self.abortButton.clicked.connect(self.abort)
 
@@ -340,6 +368,38 @@ class SpecPlotWidget(QWidget):
 
         self.setPlotMode(PLOT_1D)
         self.setZoomMode(zoommode)
+
+    def _set_stats_visible(self, flag: bool):
+        # Toggle the top numbers row
+        try:
+            self.plotHeader.setVisible(flag)
+        except Exception:
+            pass
+        # Toggle in-plot overlay/markers
+        if hasattr(self.plot, "setStatsVisible"):
+            self.plot.setStatsVisible(flag)
+
+
+    def _do_fit(self, model: str):
+        """Run a fit via the plot backend."""
+        if not hasattr(self.plot, "fit_current"):
+            QMessageBox.warning(self, "Fit not available",
+                                "Current plotting backend does not support fitting.")
+            return
+        try:
+            self.plot.fit_current(model)
+        except Exception as e:
+            # keep UI responsive; show minimal error
+            QMessageBox.warning(self, "Fit failed", f"{type(e).__name__}: {e}")
+
+    def _clear_fit_overlays(self):
+        if hasattr(self.plot, "clear_fit"):
+            self.plot.clear_fit()  # removes line, markers, and summary
+        elif hasattr(self.plot, "_clear_overlays"):
+            self.plot._clear_overlays(tag_prefix="overlay::fit")
+            if hasattr(self.plot._canvas, "remove_annotations_with_meta"):
+                self.plot._canvas.remove_annotations_with_meta("ann::fit")
+        # keep stats intact
 
     def setTitle(self, title=None):
         if title:
@@ -541,20 +601,30 @@ class SpecPlotWidget(QWidget):
     def setReady(self):
         if not self.server_mode:
             return
-
         self.serverStateLabel.setText("GANS: Ready")
-
         self.serverStateLabel.setStyleSheet("""
-            font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
-            font-size: 10pt;
-            font-weight: 500;
-            color: #2e7d32;  /* green text */
-            background-color: transparent;
-            border: none;
+            font-family: 'Segoe UI','IBM Plex Sans',sans-serif;
+            font-size: 10pt; font-weight: 500;
+            color: #2E7D32;
+            padding: 2px 10px;
+            border: 1px solid #E4EAE6;
+            border-radius: 4px;
+            background-color: #F6FAF7;
         """)
         self.abortButton.setIcon(self.abortGreyIcon)
         self.abortButton.setText("")
         self.abortButton.setEnabled(False)
+        self.abortButton.setStyleSheet("""
+            QPushButton#abortbutton {
+                font-size: 10pt; font-weight: 500;
+                padding: 2px 12px;
+                color: #9E9E9E;
+                background-color: #F5F5F5;
+                border: 1px solid #E0E0E0;
+                border-radius: 4px;
+            }
+            QPushButton#abortbutton:disabled { opacity: 0.8; }
+        """)
 
     def setBusy(self):
         if not self.server_mode:
@@ -562,33 +632,70 @@ class SpecPlotWidget(QWidget):
 
         self.serverStateLabel.setText("GANS: Busy")
         self.serverStateLabel.setStyleSheet("""
-            font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
-            font-size: 10pt;
-            font-weight: 500;
-            color: #ff9800;  /* amber/orange text */
-            background-color: transparent;
-            border: none;
+            font-family: 'Segoe UI','IBM Plex Sans',sans-serif;
+            font-size: 10pt; font-weight: 500;
+            color: #8A5A19;               /* text */
+            padding: 2px 10px;
+            border: 1px solid #E8D7C5;    /* border */
+            border-radius: 4px;
+            background-color: #FFF6EB;    /* fill */
         """)
-        self.abortButton.setIcon(self.abortActiveIcon)
-        self.abortButton.setText("Abort")
+
+        self.abortButton.setIcon(self.abortActiveIcon)  # white glyph
+        self.abortButton.setText("")                    # icon-only
         self.abortButton.setEnabled(True)
+        self.abortButton.setStyleSheet("""
+            QPushButton#abortbutton {
+                padding: 2px 8px;
+                border-radius: 4px;
+                background-color: #F2B8B5;   /* soft red */
+                border: 1px solid #E3A29E;   /* subtle edge */
+            }
+            QPushButton#abortbutton:hover:enabled {
+                background-color: #E9A39E; border-color: #D7908B;
+            }
+            QPushButton#abortbutton:pressed:enabled {
+                background-color: #D88F8A; border-color: #C47D78;
+            }
+            QPushButton#abortbutton:focus {
+                border-color: #B86D69;       /* keyboard focus */
+            }
+        """)
+
+
+
+
+
 
     def setDisconnected(self):
         if not self.server_mode:
             return
-
         self.serverStateLabel.setText("GANS: Disconnected")
         self.serverStateLabel.setStyleSheet("""
-            font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
-            font-size: 10pt;
-            font-weight: 500;
-            color: #9e9e9e;  /* grey text */
-            background-color: transparent;
-            border: none;
+            font-family: 'Segoe UI','IBM Plex Sans',sans-serif;
+            font-size: 10pt; font-weight: 500;
+            color: #9E9E9E;
+            padding: 2px 10px;
+            border: 1px solid #E0E0E0;
+            border-left: 3px solid #9E9E9E;
+            border-radius: 4px;
+            background-color: #FAFAFA;
         """)
         self.abortButton.setIcon(self.abortGreyIcon)
         self.abortButton.setText("")
         self.abortButton.setEnabled(False)
+        self.abortButton.setStyleSheet("""
+            QPushButton#abortbutton {
+                font-size: 10pt; font-weight: 500;
+                padding: 2px 12px;
+                color: #BDBDBD;
+                background-color: #F5F5F5;
+                border: 1px solid #E0E0E0;
+                border-radius: 4px;
+            }
+            QPushButton#abortbutton:disabled { opacity: 0.7; }
+        """)
+
 
     def getTitle(self):
         return  self.plotHeader.getTitle()

@@ -128,9 +128,10 @@ from StopButton import StopButton
 #         self.update()
 
 class MotorWidget(QWidget):
-    def __init__(self, motmne=None, spec=None, *args):
-        super().__init__()
+    def __init__(self, motmne=None, spec=None, parent=None, *args):
+        super().__init__(parent)
 
+        self.setWindowFlags(Qt.Widget)
         self.motor = None
         self.modified = False
         self._position = None
@@ -248,8 +249,8 @@ class MotorWidget(QWidget):
         self.update()
 
     def update(self):
-        if not self.is_shown:
-            return
+        # if not self.is_shown:
+        #     return
 
         self.motorLabel.setText(self.motmne)
 

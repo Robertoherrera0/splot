@@ -77,8 +77,17 @@ class _PlotlyCanvas:
         self._config = dict(
             displaylogo=False,
             responsive=True,
-            modeBarButtonsToAdd=["select2d","lasso2d","zoom2d","pan2d","toImage"],
+            displayModeBar=True,     # always show the toolbar
+            scrollZoom=True,         # wheel zoom
+            doubleClick="reset",       # we'll implement our own dblclick reset
+            modeBarButtonsToRemove=[],   # keep Plotly's defaults (reset/auto-scale/etc.)
+            modeBarButtonsToAdd=[        # add a few handy extras
+                "zoomIn2d", "zoomOut2d",
+                "hoverCompareCartesian",
+                "toImage",
+            ],
         )
+
 
         self._ready = False
         self._pending = None
@@ -125,15 +134,21 @@ class _PlotlyCanvas:
         # Keep a temp dir alive for the life of the view
         self._tmpdir = pathlib.Path(tempfile.mkdtemp(prefix="splot_plotly_"))
 
-        # Write the Plotly bundle next to the HTML (so we don’t inline it)
+        # Prefer a bundled file if you ship one alongside this module:
+        bundle_path = pathlib.Path(__file__).with_name("plotly.min.js")
         try:
-            from plotly.offline import get_plotlyjs
-            (self._tmpdir / "plotly.min.js").write_text(get_plotlyjs(), encoding="utf-8")
-            plotly_tag = '<script src="plotly.min.js"></script>'
-            print("[PLOT] Using local Plotly bundle")
+            if bundle_path.exists():
+                js_text = bundle_path.read_text(encoding="utf-8")
+                print("[PLOT] Using bundled plotly.min.js")
+            else:
+                # Last resort: generate from plotly (still offline)
+                from plotly.offline import get_plotlyjs
+                js_text = get_plotlyjs()
+                print("[PLOT] Using plotly.offline.get_plotlyjs() output")
+            (self._tmpdir / "plotly.min.js").write_text(js_text, encoding="utf-8")
         except Exception as e:
-            print(f"[PLOT] Could not get local plotlyjs: {e}; using CDN")
-            plotly_tag = '<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>'
+            print(f"[PLOT] Could not materialize plotly.min.js: {e}")
+        plotly_tag = '<script src="plotly.min.js"></script>'
 
         html = f"""<!doctype html>
     <html>
@@ -141,47 +156,83 @@ class _PlotlyCanvas:
     <meta charset="utf-8"/>
     {plotly_tag}
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
-    <style>html,body,#plot{{height:100%;width:100%;margin:0}}</style>
+    <style>
+    html,body{{height:100%;width:100%;margin:0;background:transparent;}}
+    #plot{{height:100%;width:100%;background:transparent;}}
+    #plot .modebar{{
+        top:8px !important;       /* pull it down a bit */
+        right:8px !important;     /* pull it in from the right */
+        background:rgba(255,255,255,0.65);
+        border-radius:6px;
+        padding:2px;
+    }}
+    #plot .modebar-btn{{ opacity:0.85; }}
+    #plot .modebar-btn:hover{{ opacity:1; }}
+    </style>
     </head>
     <body>
     <div id="plot"></div>
     <script>
-        // Define renderFigure first so Python can call it at any time
-        window.renderFigure = function(figJSON, cfgJSON) {{
-        try {{
-            const fig = JSON.parse(figJSON);
-            const cfg = JSON.parse(cfgJSON);
-            Plotly.react('plot', fig.data, fig.layout, cfg);
+    // Define renderFigure first so Python can call it at any time
+    window.renderFigure = function(figJSON, cfgJSON) {{
+    try {{
+        const fig = JSON.parse(figJSON);
+        const cfg = JSON.parse(cfgJSON);
 
-            const plot = document.getElementById('plot');
-            if (plot && plot.removeAllListeners) plot.removeAllListeners();
+        const plot = document.getElementById('plot');
+        if (plot && plot.removeAllListeners) plot.removeAllListeners();
 
-            function xLabel(f) {{
-            return f?.layout?.xaxis?.title?.text || '';
-            }}
+        // Render/update the figure, then tint only the axes area
+        Plotly.react('plot', fig.data, fig.layout, cfg).then(() => {{
+        const paper  = (fig.layout && fig.layout.paper_bgcolor) || 'transparent';
+        const plotbg = (fig.layout && fig.layout.plot_bgcolor)  || 'transparent';
 
-            plot.on('plotly_click', (e) => {{
-            if (!window.qt_bridge || !e?.points?.length) return;
-            const x = parseFloat(e.points[0].x);
-            if (!Number.isNaN(x)) window.qt_bridge.emitPointSelected(xLabel(fig), x);
+        // keep the outer page neutral; don't tint #plot itself
+        document.documentElement.style.background = paper;
+        document.body.style.background = paper;
+
+        const applyBg = () => {{
+            // For each subplot, set the background rect fill + a subtle frame
+            const rects = plot.querySelectorAll('.bglayer rect.bg');
+            rects.forEach(r => {{
+            r.setAttribute('fill', plotbg);
+            r.setAttribute('stroke', 'rgba(0,0,0,0.18)');
+            r.setAttribute('stroke-width', '1');
             }});
-            plot.on('plotly_selected', (e) => {{
-            if (!window.qt_bridge || !e?.range?.x) return;
-            const [x0, x1] = e.range.x.map(parseFloat);
-            if (!Number.isNaN(x0) && !Number.isNaN(x1))
-                window.qt_bridge.emitRegionSelected(xLabel(fig), x0, x1);
-            }});
-            console.log('renderFigure: done');
-        }} catch (err) {{
-            console.error('renderFigure error:', err);
-        }}
         }};
-
-        // WebChannel after defining renderFigure
-        new QWebChannel(qt.webChannelTransport, (channel) => {{
-        window.qt_bridge = channel.objects.qt_bridge || null;
-        console.log('qt webchannel ready');
+        // run now and on redraw/resize
+        requestAnimationFrame(applyBg);
+        plot.on('plotly_afterplot', applyBg);
+        window.addEventListener('resize', applyBg, {{ passive: true }});
         }});
+
+        function xLabel(f) {{
+        return f?.layout?.xaxis?.title?.text || '';
+        }}
+
+        plot.on('plotly_click', (e) => {{
+        if (!window.qt_bridge || !e?.points?.length) return;
+        const x = parseFloat(e.points[0].x);
+        if (!Number.isNaN(x)) window.qt_bridge.emitPointSelected(xLabel(fig), x);
+        }});
+        plot.on('plotly_selected', (e) => {{
+        if (!window.qt_bridge || !e?.range?.x) return;
+        const [x0, x1] = e.range.x.map(parseFloat);
+        if (!Number.isNaN(x0) && !Number.isNaN(x1))
+            window.qt_bridge.emitRegionSelected(xLabel(fig), x0, x1);
+        }});
+
+        console.log('renderFigure: done');
+    }} catch (err) {{
+        console.error('renderFigure error:', err);
+    }}
+    }};
+
+    // WebChannel after defining renderFigure
+    new QWebChannel(qt.webChannelTransport, (channel) => {{
+    window.qt_bridge = channel.objects.qt_bridge || null;
+    console.log('qt webchannel ready');
+    }});
     </script>
     </body>
     </html>"""
@@ -189,6 +240,8 @@ class _PlotlyCanvas:
         index_path = self._tmpdir / "index.html"
         index_path.write_text(html, encoding="utf-8")
         self.web.load(QUrl.fromLocalFile(str(index_path)))
+
+
     # ---- Shapes / annotations management ----
     def add_shape(self, shape: dict):
         self._shapes.append(shape)
@@ -493,6 +546,9 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
 
     def __init__(self, parent=None, *args, **kwargs):
         self.parent = parent
+        self.theme = "dim"   # "light" | "dim" | "dark"
+        self.show_frame = True        # draw a 1px frame around the plot area
+        self.live_tint  = True        # tint background while scanning
 
         # axis/data bounds cache
         self.x_min = self.x_max = None
@@ -507,6 +563,9 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         # axes control
         self.axes_auto = {}
         self.axes_limits = {}
+
+        self.showing_grid = True 
+
 
         SpecPlotBaseClass.__init__(self, **kwargs)
         QWidget.__init__(self, parent, *args)
@@ -552,6 +611,12 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         self.zoomer = _NullZoomer(weakref.ref(self))
         self.regionzoom = _NullRegionZoom(weakref.ref(self))
 
+        self._overlays = []          # extra traces (fits, etc.)
+        self._last_region = None     # (x0, x1) from drag selection
+        self.stats_visible = True
+        self._last_stats = {}
+        self._last_fit = None       # store last fit result (for peak/FWHM export)
+
 
         self.loadPreferences()
         self.initColorTable()
@@ -560,8 +625,37 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         self.replot()
 
 
+    def _theme_colors(self):
+        t = getattr(self, "theme", "light")
 
-    # --- add this helper inside SpecPlotPlotly ---
+        if t == "dim":
+            return dict(
+                paper="#F8FAFC", plot="#F3F4F6",
+                paper_live="#EEF2FF", plot_live="#E5E7EB",   # live tint
+                grid="rgba(0,0,0,0.10)", axis="#6B7280", tick="#111827",
+                legend_bg="rgba(255,255,255,0.85)", frame="#CBD5E1"
+            )
+        if t == "dark":
+            return dict(
+                paper="#0B1220", plot="#111827",
+                paper_live="#0D1726", plot_live="#0F1B2D",
+                grid="rgba(255,255,255,0.12)", axis="#C7D2FE", tick="#E5E7EB",
+                legend_bg="rgba(17,24,39,0.8)", frame="#334155"
+            )
+        # light
+        return dict(
+            paper="#FFFFFF", plot="#FFFFFF",
+            paper_live="#FFF8E1", plot_live="#FFF2C2",
+            grid="rgba(0,0,0,0.08)", axis="#4B5563", tick="#111827",
+            legend_bg="rgba(255,255,255,0.8)", frame="#D1D5DB"
+        )
+
+    def _is_live(self):
+        try:
+            return bool(self.isScanRunning())
+        except Exception:
+            return False
+
     def redrawCurves(self):
         self.queue_replot()
 
@@ -597,9 +691,127 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
     def _emit_region_selected(self, xlabel: str, x0: float, x1: float):
         if not xlabel:
             xlabel = getattr(self, "first_x", "")
-        self.regionSelected.emit(xlabel, x0, x1)
+        lo, hi = (x0, x1) if x0 <= x1 else (x1, x0)
+        self._last_region = (lo, hi)
+        self.regionSelected.emit(xlabel, lo, hi)
+
 
     # ------------- Public API compatibility -------------
+    def _active_curve(self):
+        # Prefer a selected curve; else first attached on Y1; else any attached
+        attached = [c for c in self.curves.values() if c.isAttached()]
+        if not attached:
+            return None
+        sel = [c for c in attached if getattr(c, "selected", False)]
+        if sel:
+            return sel[0]
+        y1 = [c for c in attached if c.yaxis == Y1_AXIS]
+        return (y1[0] if y1 else attached[0])
+
+    def _data_for_fit(self):
+        c = self._active_curve()
+        if not c or c._x.size < 3:
+            return None, None, None
+        x, y = np.asarray(c._x, float), np.asarray(c._y, float)
+        if self._last_region:
+            lo, hi = self._last_region
+            m = (x >= lo) & (x <= hi)
+            if np.any(m):
+                x, y = x[m], y[m]
+        return c, x, y
+
+    def _clear_overlays(self, tag_prefix=None):
+        if tag_prefix is None:
+            self._overlays = []
+        else:
+            self._overlays = [t for t in self._overlays
+                            if not (isinstance(t, dict) and str(t.get("meta","")).startswith(tag_prefix))]
+
+    def _add_fit_overlay(self, xgrid, yfit, name, color=None, meta="overlay::fit"):
+        tr = go.Scatter(
+            x=xgrid, y=yfit, name=name, mode="lines",
+            line=dict(width=2, dash="dash", color=(str(color) if color else None)),
+            showlegend=True
+        )
+        # we store meta via to_plotly_json so we can filter later
+        d = tr.to_plotly_json()
+        d["meta"] = meta
+        self._overlays.append(go.Scatter(**d))
+
+    def fit_current(self, model: str = "gaussian"):
+        from SpecPlotFitModels import fit_curve, gaussian, hill  # local import
+
+        curve, x, y = self._data_for_fit()
+        if curve is None or x.size < 3:
+            print("[FIT] no curve to fit"); 
+            # also clear any stale UI bits
+            self._clear_overlays(tag_prefix="overlay::fit")
+            self._canvas.remove_annotations_with_meta("ann::fit")
+            self.queue_replot()
+            return {}
+
+        # 1) compute fit
+        res = fit_curve(x, y, model)
+        print(f"[FIT] {model}:", res)
+
+        # 2) smooth x-grid across current data extents
+        xmin = float(np.nanmin(x)); xmax = float(np.nanmax(x))
+        xgrid = np.linspace(xmin, xmax, 400)
+
+        if model == "gaussian":
+            yfit = gaussian(xgrid, *res["popt"])
+            name = f"{curve.mne} • Gaussian fit"
+            # update vertical markers (optional)
+            try:
+                self._set_vertical_marker("PEAK", res["x0"])
+                if res.get("fwhm") is not None:
+                    self._set_vertical_marker("FWHM", res["x0"])
+            except Exception:
+                pass
+        else:
+            yfit = hill(xgrid, *res["popt"])
+            name = f"{curve.mne} • Hill fit"
+
+        # 3) remove any prior fit overlays + annotation
+        self._clear_overlays(tag_prefix="overlay::fit")
+        self._canvas.remove_annotations_with_meta("ann::fit")
+
+        # 4) add the fit overlay (ALWAYS red & dashed; never reuse curve color)
+        red = self._fit_color()
+        tr = go.Scatter(
+            x=xgrid.tolist(), y=yfit.tolist(),
+            name=name, mode="lines",
+            line=dict(color=red, width=2, dash="dash"),
+            showlegend=True, hoverinfo="skip",
+            meta="overlay::fit",
+        )
+        self._add_overlay(tr, tag="overlay::fit")
+
+        # 5) compact summary annotation (top-left)
+        summary = f"{model.upper()}  R²={res.get('r2', float('nan')):.3f}  x0={res.get('x0', float('nan')):.4g}"
+        if res.get("fwhm") is not None:
+            summary += f"  FWHM={res['fwhm']:.4g}"
+
+        self._canvas.add_annotation(dict(
+            x=0.01, y=0.99, xref="paper", yref="paper",
+            text=summary, showarrow=False,
+            font=dict(size=11), align="left",
+            meta="ann::fit"
+        ))
+
+        self.queue_replot()
+        return res
+    
+
+    def _set_vertical_marker(self, label_contains: str, x: float, color=None):
+        for m in self.markers.values():
+            if getattr(m, "marker_type", None) == MARKER_VERTICAL:
+                lab = (m.getLabel() or "").upper()
+                if label_contains.upper() in lab:
+                    m.setXValue(float(x))
+                    if color is not None:
+                        m.setColor(color)
+                    m.draw()
 
     def addCurve(self, colname):
         curve = SpecPlotCurvePlotly(colname, self)
@@ -758,13 +970,16 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
                 traces.append(tr)
 
         # If there are no curves yet, add an invisible trace so axes appear
-        # --- in SpecPlotPlotly.replot(), when no real traces are present ---
         if not traces:
             traces = [go.Scatter(
                 x=[0, 1], y=[0, 1], mode="lines",
                 line=dict(width=0), showlegend=False, hoverinfo="skip", name=""
             )]
+        if self._overlays:
+            traces.extend(self._overlays)
 
+        fig = go.Figure(data=traces)   # <— add this line
+        fig = go.Figure(data=traces)
         fig = go.Figure(data=traces)
         fig.update_xaxes(range=[0, 1])
         fig.update_yaxes(range=[0, 1])
@@ -788,16 +1003,62 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         legend.update(_legend_layout_from_key(getattr(self, "legend_position", "auto")))
         legend["visible"] = bool(getattr(self, "showlegend", True))
 
-        # Dual y-axes
+
+        # --- Grid + theme colors ---
+        cols = self._theme_colors()
+        grid_on = bool(getattr(self, "showing_grid", True))
+
+        # Live tint while scanning
+        live = self.live_tint and self._is_live()
+        paper_bg = cols["paper"]
+        plot_bg  = cols["plot_live"]  if live else cols["plot"]
+
+        # Legend
+        legend = dict(orientation="v", traceorder="normal", font=dict(size=10),
+                    bgcolor=cols["legend_bg"])
+        legend.update(_legend_layout_from_key(getattr(self, "legend_position", "auto")))
+        legend["visible"] = bool(getattr(self, "showlegend", True))
+
+        # --- Frame: paper-relative rectangle (added as a canvas shape) ---
+        self._canvas.remove_shapes_with_meta("decor::frame")
+        if self.show_frame:
+            self._canvas.add_shape(dict(
+                type="rect", xref="paper", yref="paper",
+                x0=0, y0=0, x1=1, y1=1,
+                line=dict(color=cols["frame"], width=1),
+                fillcolor="rgba(0,0,0,0)",
+                layer="below",
+                meta="decor::frame",
+            ))
+
+        # --- Axes + layout ---
         fig.update_layout(
-            xaxis=dict(title=dict(text=x_title), type=x_type, showgrid=show_grid, zeroline=False),
-            yaxis=dict(title=y1_title, type=y1_type, showgrid=show_grid, zeroline=False),
-            yaxis2=dict(title=y2_title, type=y2_type, overlaying="y", side="right", showgrid=False, zeroline=False),
+            xaxis=dict(
+                title=dict(text=x_title), type=x_type,
+                showgrid=grid_on, gridcolor=cols["grid"], gridwidth=1,
+                tickfont=dict(color=cols["tick"]), linecolor=cols["axis"], showline=False,
+                zeroline=False
+            ),
+            yaxis=dict(
+                title=y1_title, type=y1_type,
+                showgrid=grid_on, gridcolor=cols["grid"], gridwidth=1,
+                tickfont=dict(color=cols["tick"]), linecolor=cols["axis"], showline=False,
+                zeroline=False
+            ),
+            yaxis2=dict(
+                title=y2_title, type=y2_type, overlaying="y", side="right",
+                showgrid=False, zeroline=False, tickfont=dict(color=cols["tick"])
+            ),
             legend=legend,
-            margin=dict(l=60, r=60, t=30, b=45),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=52, r=5, t=35, b=22),   # <-- smaller margins
+            paper_bgcolor=paper_bg,
+            plot_bgcolor=plot_bg,
         )
+
+        # Let Plotly auto-shrink margins to fit ticks/titles
+        fig.update_xaxes(automargin=True, title_standoff=4, ticks="outside", ticklen=6)
+        fig.update_yaxes(automargin=True, title_standoff=6, ticks="outside", ticklen=6)
+
 
         # 3) limits (auto or manual)
         self.check_limits()
@@ -848,6 +1109,7 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         self._canvas.render(fig)
         # notify
         self.configurationChanged.emit()
+    
 
     def queue_replot(self):
         # Keep it simple: coalesce rapid updates
@@ -872,6 +1134,32 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
 
     def setY2Limits(self, y0, y1):
         self._setAxisLimits(Y2_AXIS, y0, y1)
+    
+    def _fit_color(self) -> str:
+        """Red for fits; if a data curve already uses that exact red, pick a nearby red."""
+        FIT_RED = "#E11D48"   # rose-600
+        ALT_RED = "#DC2626"   # red-600
+        used = {str(c.color) for c in self.curves.values() if c.isAttached() and c.color}
+        return FIT_RED if FIT_RED not in used else ALT_RED
+
+    def _add_overlay(self, trace: go.Scatter, tag: str):
+        """Add/replace a single-tag overlay trace."""
+        # remove any existing with same tag
+        self._overlays = [t for t in self._overlays if getattr(t, "meta", None) != tag]
+        self._overlays.append(trace)
+        self.queue_replot()
+
+    def _clear_overlays(self, tag_prefix: str | None = None):
+        """Clear overlays; if prefix given, clear only those with that prefix."""
+        if tag_prefix is None:
+            self._overlays.clear()
+        else:
+            self._overlays = [t for t in self._overlays
+                            if not str(getattr(t, "meta", "")).startswith(tag_prefix)]
+        # also remove any fit annotation
+        self._canvas.remove_annotations_with_meta("ann::fit")
+        self.queue_replot()
+
 
 
 # ------------------------- Local test -------------------------

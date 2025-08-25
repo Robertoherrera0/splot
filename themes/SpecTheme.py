@@ -58,7 +58,6 @@ class GansTheme(SPlotTheme):
     # Series palette: high contrast, not neon
     default_plot_colors = [
         "#0B5FA4",  # blue
-        "#C62828",  # red
         "#2E7D32",  # green
         "#6A1B9A",  # violet
         "#00838F",  # teal

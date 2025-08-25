@@ -104,30 +104,43 @@ class MenuBarSet(object):
         self.menubar = menubar
 
 class SplotTabBar(QTabBar):
-
     def __init__(self, parent, *args):
         self.parent = parent
         self.mouseactive = 0
         QTabBar.__init__(self, parent, *args)
 
+        # --- initialize everything used later ---
+        self.inity = 0
+        self.detaching = 0
+        self.tabwid = None
+        self.tabnumber = -1
+        self.tab0 = 0
+        self.tab1 = 0
+        self.setMouseTracking(True)  # ensures we get move events
+
     def mousePressEvent(self, ev):
-
         self.inity = ev.pos().y()
+        self.tabnumber = self.tabAt(ev.pos())
 
-        self.tabnumber = self.tabAt(ev.pos())  # which tabnumber
+        if self.tabnumber < 0:
+            # press not on a tab: reset and pass through
+            self.mouseactive = 0
+            self.detaching = 0
+            self.tabwid = None
+            return QTabBar.mousePressEvent(self, ev)
+
         self.tabrect = self.tabRect(self.tabnumber)
         self.tab0 = self.tabrect.y()
         self.tab1 = self.tabrect.y() + self.tabrect.height()
 
-        if self.parent.canDetach():
+        if getattr(self.parent, "canDetach", lambda: False)():
             self.mouseactive = 1
             self.tabwid = self.parent.widgetAtTabNumber(self.tabnumber)
             self.detaching = 0
-
             self.initPos = ev.pos()
 
-            globalpos = self.mapToGlobal(QPoint(self.x(), self.y()))
-
+            # top-left of the bar in global coords
+            globalpos = self.mapToGlobal(QPoint(0, 0))
             self.minx = globalpos.x()
             self.miny = globalpos.y()
             self.maxx = self.minx + self.width()
@@ -136,28 +149,22 @@ class SplotTabBar(QTabBar):
         QTabBar.mousePressEvent(self, ev)
 
     def mouseMoveEvent(self, ev):
-
+        # safe even if a move arrives before a press
         cury = ev.pos().y()
         totmoved = cury - self.inity
         tab_topy = self.tab0 + totmoved
         tab_boty = self.tab1 + totmoved
 
-        if self.mouseactive and self.tabwid:
-
+        if self.mouseactive and self.tabwid is not None:
             globalpos = self.mapToGlobal(ev.pos())
-            gx = globalpos.x()
-            gy = globalpos.y()
+            gx, gy = globalpos.x(), globalpos.y()
 
-            self.out = False
-
-            if (self.minx - gx) > 10:
-                self.out = True
-            if (self.miny - gy) > 10:
-                self.out = True
-            if (gx - self.maxx) > 10:
-                self.out = True
-            if (gy - self.maxy) > 10:
-                self.out = True
+            self.out = (
+                (self.minx - gx) > 10 or
+                (self.miny - gy) > 10 or
+                (gx - self.maxx) > 10 or
+                (gy - self.maxy) > 10
+            )
 
             if self.out and (not self.detaching):
                 # detach
@@ -174,7 +181,7 @@ class SplotTabBar(QTabBar):
                     self.parent.attach(self.tabwid.getName())
                     self.detaching = 0
 
-        # restrict mouse move event to keep tabs on view.
+        # keep tabs in view
         if (tab_topy > -4) and (tab_boty < (self.rect().height() + 5)):
             QTabBar.mouseMoveEvent(self, ev)
 
@@ -184,7 +191,6 @@ class SplotTabBar(QTabBar):
         self.tabwid = None
         QTabBar.mouseReleaseEvent(self, ev)
 
-
 class SplotTabWidget(QTabWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -192,32 +198,32 @@ class SplotTabWidget(QTabWidget):
         self.setTabsClosable(True)
         self.setTabPosition(QTabWidget.North)
 
-        self.tabBar().setMovable(False)
+        bar = self.tabBar()
+        bar.setMovable(False)
+        bar.setDrawBase(False)
+        bar.setExpanding(False)          # tabs fit text, not stretch
+        bar.setElideMode(Qt.ElideRight)  # ellipsis for long titles
         self.tabCloseRequested.connect(self.removeTab)
-        self.tabBar().setDrawBase(False)
 
         self.setStyleSheet("""
-            QTabBar {
-                qproperty-drawBase: 0;
-            }
+            QTabBar { qproperty-drawBase: 0; }
             QTabBar::tab {
-                font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-                font-size: 13px;
+                font-family: 'IBM Plex Sans','Segoe UI',sans-serif;
+                font-size: 11px;               /* 13 -> 11 */
                 font-weight: 500;
                 color: #2b2b2b;
-                padding: 6px 14px;
+                padding: 4px 10px;             /* slimmer: 6x14 -> 4x10 */
+                margin-right: 8px;              /* small gap between tabs */
                 background: transparent;
                 border: none;
+                min-height: 22px;               /* consistent height */
             }
             QTabBar::tab:selected {
                 border-bottom: 2px solid #2b2b2b;
-                background-color: transparent;
-            }
-            QTabBar::tab:hover {
-                background-color: #f1f1f1;
+                background: transparent;
             }
             QTabBar::tab:hover:!selected {
-                background-color: #f5f5f5;
+                background: #f5f5f5;
                 border-bottom: 2px solid #bbbbbb;
             }
             QTabWidget::pane {
@@ -232,9 +238,7 @@ class SplotTabWidget(QTabWidget):
                 subcontrol-position: right;
                 margin-left: 6px;
             }
-            QTabBar::close-button:hover {
-                background: transparent;
-            }
+            QTabBar::close-button:hover { background: transparent; }
         """)
 
 
