@@ -1634,9 +1634,9 @@ class ServerPanel(QWidget):
         scanLayout.setContentsMargins(1, 1, 1, 1)
         layout.addWidget(scanGroup)
 
-        self.scanRunner = ScanRunnerWidget(self)
-        self.scanRunner.set_connection(self.conn)
-        layout.addWidget(self.scanRunner)
+        # self.scanRunner = ScanRunnerWidget(self)
+        # self.scanRunner.set_connection(self.conn)
+        # layout.addWidget(self.scanRunner)
 
         # --- Raw SPEC Command Input ---
         self.cmdline = CommandLineWidget(self)

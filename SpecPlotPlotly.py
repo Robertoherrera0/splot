@@ -539,6 +539,7 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
     pointSelected = Signal(str, float)
     regionSelected = Signal(str, float, float)
     configurationChanged = Signal()
+    fitResultsReady = Signal(dict)
 
     _vertical_marker_class = SpecPlotVerticalMarkerPlotly
     _text_marker_class = SpecPlotTextMarkerPlotly
@@ -549,6 +550,7 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         self.theme = "dim"   # "light" | "dim" | "dark"
         self.show_frame = True        # draw a 1px frame around the plot area
         self.live_tint  = True        # tint background while scanning
+        self._last_fit = {}  
 
         # axis/data bounds cache
         self.x_min = self.x_max = None
@@ -739,33 +741,33 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         self._overlays.append(go.Scatter(**d))
 
     def fit_current(self, model: str = "gaussian"):
-        from SpecPlotFitModels import fit_curve, gaussian, hill  # local import
+        from SpecPlotFitModels import fit_curve, gaussian, hill
 
+        # 0) pull current curve data (or selected region)
         curve, x, y = self._data_for_fit()
         if curve is None or x.size < 3:
-            print("[FIT] no curve to fit"); 
-            # also clear any stale UI bits
+            print("[FIT] no curve to fit")
             self._clear_overlays(tag_prefix="overlay::fit")
             self._canvas.remove_annotations_with_meta("ann::fit")
             self.queue_replot()
             return {}
 
-        # 1) compute fit
+        # 1) run fit
         res = fit_curve(x, y, model)
         print(f"[FIT] {model}:", res)
 
-        # 2) smooth x-grid across current data extents
+        # 2) make a smooth grid across the data extents and compute yfit
         xmin = float(np.nanmin(x)); xmax = float(np.nanmax(x))
         xgrid = np.linspace(xmin, xmax, 400)
 
         if model == "gaussian":
             yfit = gaussian(xgrid, *res["popt"])
             name = f"{curve.mne} • Gaussian fit"
-            # update vertical markers (optional)
+            # optional: update vertical markers
             try:
-                self._set_vertical_marker("PEAK", res["x0"])
+                self._set_vertical_marker("PEAK", res.get("x0"))
                 if res.get("fwhm") is not None:
-                    self._set_vertical_marker("FWHM", res["x0"])
+                    self._set_vertical_marker("FWHM", res.get("x0"))
             except Exception:
                 pass
         else:
@@ -776,7 +778,7 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         self._clear_overlays(tag_prefix="overlay::fit")
         self._canvas.remove_annotations_with_meta("ann::fit")
 
-        # 4) add the fit overlay (ALWAYS red & dashed; never reuse curve color)
+        # 4) add dashed red overlay for the fit
         red = self._fit_color()
         tr = go.Scatter(
             x=xgrid.tolist(), y=yfit.tolist(),
@@ -787,21 +789,82 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         )
         self._add_overlay(tr, tag="overlay::fit")
 
-        # 5) compact summary annotation (top-left)
-        summary = f"{model.upper()}  R²={res.get('r2', float('nan')):.3f}  x0={res.get('x0', float('nan')):.4g}"
-        if res.get("fwhm") is not None:
-            summary += f"  FWHM={res['fwhm']:.4g}"
+        # 5) compact summary badge (top-left) — built ONLY from fitter outputs
+        p = res.get("params", {})  # for gaussian: {"A","x0","sigma","B"}
+        r2   = float(res.get("r2", float("nan")))
+        x0   = float(res.get("x0", float("nan")))      # fitted center
+        fwhm = float(res.get("fwhm", float("nan")))
+
+        # fitted peak y-value:
+        #   Gaussian: ŷ(x0) = A + B
+        #   Other models: take max of the fitted curve we just computed
+        if model == "gaussian":
+            A = float(p.get("A", float("nan")))
+            B = float(p.get("B", 0.0))
+            yhat = A + B if np.isfinite(A) and np.isfinite(B) else float("nan")
+        else:
+            i_max = int(np.nanargmax(yfit))
+            x0 = float(xgrid[i_max])   # fitted peak x (for non-Gaussian)
+            yhat = float(yfit[i_max])
+
+        parts = [f"{model.upper()}", f"R²={r2:.3f}"]
+        if np.isfinite(x0):   parts.append(f"Peak_x={x0:.3f}")
+        if np.isfinite(yhat): parts.append(f"Peak_y={yhat:.3f}")
+        if np.isfinite(fwhm): parts.append(f"FWHM={fwhm:.3f}")
+        summary = "  ".join(parts)
 
         self._canvas.add_annotation(dict(
             x=0.01, y=0.99, xref="paper", yref="paper",
-            text=summary, showarrow=False,
-            font=dict(size=11), align="left",
+            text=summary, showarrow=False, font=dict(size=11), align="left",
+            bgcolor="rgba(255,255,255,0.85)",   # white background
+            bordercolor="rgba(0,0,0,0.25)",    # subtle border
+            borderwidth=1,
+            borderpad=3,
             meta="ann::fit"
         ))
 
+        # also stash for programmatic access
+        self._last_fit = {
+            "peak_fit_x": x0,
+            "peak_fit_y": yhat,
+            "fwhm": fwhm,
+            "r2": r2,
+        }
+        self.fitResultsReady.emit(self._last_fit)
+
+        # 6) stash/export a few values for others to consume
+        try:
+            ymax_idx = int(np.argmax(y))
+            peak_max = float(x[ymax_idx])
+        except Exception:
+            peak_max = None
+
+        self._last_fit = {
+            "peak_fit": float(p.get("x0")) if p.get("x0") is not None else float("nan"),
+            "fwhm": float(fwhm) if fwhm is not None else float("nan"),
+            "r2": r2,
+            "peak_max": peak_max,
+            "com": float(np.sum(x * y) / np.sum(y)) if np.sum(y) > 0 else None,
+        }
+        self.fitResultsReady.emit(self._last_fit)
+
+        # 7) redraw and return
         self.queue_replot()
-        return res
-    
+        return self._last_fit
+
+    def getFitResults(self) -> dict:
+        """Return the last fit results dict (safe copy)."""
+        return dict(self._last_fit or {})
+
+
+    def get_last_fit_results(self):
+            """Return dict with last fit results (peak_fit, fwhm, r2, peak_max, com)."""
+            return dict(self._last_fit)
+
+    def get_current_curve_data(self):
+        """Return (x, y) arrays of the active curve (after region selection if set)."""
+        c, x, y = self._data_for_fit()
+        return (x.copy(), y.copy()) if x is not None else (None, None)
 
     def _set_vertical_marker(self, label_contains: str, x: float, color=None):
         for m in self.markers.values():
