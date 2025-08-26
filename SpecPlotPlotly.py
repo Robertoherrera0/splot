@@ -1097,16 +1097,26 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         # --- Axes + layout ---
         fig.update_layout(
             xaxis=dict(
-                title=dict(text=x_title), type=x_type,
-                showgrid=grid_on, gridcolor=cols["grid"], gridwidth=1,
-                tickfont=dict(color=cols["tick"]), linecolor=cols["axis"], showline=False,
-                zeroline=False
+                title=dict(text=x_title),
+                type=x_type,
+                showgrid=True,
+                gridcolor=cols["grid"],
+                gridwidth=1,
+                tickfont=dict(color=cols["tick"]),
+                linecolor=cols["axis"],
+                showline=False,
+                zeroline=False,
             ),
             yaxis=dict(
-                title=y1_title, type=y1_type,
-                showgrid=grid_on, gridcolor=cols["grid"], gridwidth=1,
-                tickfont=dict(color=cols["tick"]), linecolor=cols["axis"], showline=False,
-                zeroline=False
+                title=y1_title,
+                type=y1_type,
+                showgrid=True,
+                gridcolor=cols["grid"],
+                gridwidth=1,
+                tickfont=dict(color=cols["tick"]),
+                linecolor=cols["axis"],
+                showline=False,
+                zeroline=False,
             ),
             yaxis2=dict(
                 title=y2_title, type=y2_type, overlaying="y", side="right",
