@@ -160,7 +160,7 @@ class MotorWidget(QWidget):
         self.motorLabel.setFont(font)
 
         self.currentLabel = QLabel()
-        self.currentLabel.setFixedWidth(70)
+        self.currentLabel.setFixedWidth(10)
 
         # --- NEW: mode dropdown (Abs/Rel) ---
         self.modeCombo = QComboBox()
