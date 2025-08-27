@@ -235,12 +235,12 @@ class SpecPlotWidget(QWidget):
         viewMenu.addAction(self.statsAction)
 
         # Toggle: Show source markers
-        self.sourceMarkersAction = QAction("Show source markers", self, checkable=True, checked=True)
+        self.sourceMarkersAction = QAction("Show command panel", self, checkable=True, checked=True)
         self.sourceMarkersAction.toggled.connect(self._set_source_visible)
         viewMenu.addAction(self.sourceMarkersAction)
 
         # Toggle: Show lot/stat markers
-        self.lotMarkersAction = QAction("Show lot/stat markers", self, checkable=True, checked=True)
+        self.lotMarkersAction = QAction("Show stats markers", self, checkable=True, checked=True)
         self.lotMarkersAction.toggled.connect(self._set_lot_markers_visible)
         viewMenu.addAction(self.lotMarkersAction)
 
