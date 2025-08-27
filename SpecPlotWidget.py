@@ -221,14 +221,32 @@ class SpecPlotWidget(QWidget):
         self.fitButton.setMenu(fitMenu)
         self.fitButton.clicked.connect(lambda: self._do_fit("gaussian"))  # default action on button click
 
-        # Stats toggle (show/hide header & in-plot stats/markers)
-        self.statsAction = QAction(icons.get_icon('stats'), "Show stats", self)
-        self.statsAction.setCheckable(True)
-        self.statsAction.setChecked(True)
-        self.statsAction.toggled.connect(self._set_stats_visible)
+        # --- View dropdown (stats, source, markers) ---
+        self.viewButton = QToolButton(self)
+        self.viewButton.setIcon(icons.get_icon('view'))   # use 'view.svg' or similar
+        self.viewButton.setToolTip("View options")
+        self.viewButton.setPopupMode(QToolButton.InstantPopup)
 
-        # Add to toolbar
-        self.toolbar.addAction(self.statsAction)
+        viewMenu = QMenu(self.viewButton)
+
+        # Toggle: Show scan info (header + stats)
+        self.statsAction = QAction("Show scan info", self, checkable=True, checked=True)
+        self.statsAction.toggled.connect(self._set_stats_visible)
+        viewMenu.addAction(self.statsAction)
+
+        # Toggle: Show source markers
+        self.sourceMarkersAction = QAction("Show source markers", self, checkable=True, checked=True)
+        self.sourceMarkersAction.toggled.connect(self._set_source_visible)
+        viewMenu.addAction(self.sourceMarkersAction)
+
+        # Toggle: Show lot/stat markers
+        self.lotMarkersAction = QAction("Show lot/stat markers", self, checkable=True, checked=True)
+        self.lotMarkersAction.toggled.connect(self._set_lot_markers_visible)
+        viewMenu.addAction(self.lotMarkersAction)
+
+        self.viewButton.setMenu(viewMenu)
+        self.toolbar.addWidget(self.viewButton)
+
 
         # Printer
         self.printAction = QAction(icons.get_icon('printer'), "Print", self)
@@ -662,9 +680,13 @@ class SpecPlotWidget(QWidget):
             }
         """)
 
+    def _set_source_visible(self, flag: bool):
+        if hasattr(self.plot, "setSourceMarkersVisible"):
+            self.plot.setSourceMarkersVisible(flag)
 
-
-
+    def _set_lot_markers_visible(self, flag: bool):
+        if hasattr(self.plot, "setLotMarkersVisible"):
+            self.plot.setLotMarkersVisible(flag)
 
 
     def setDisconnected(self):

@@ -1359,7 +1359,7 @@ class MoveWidget(QWidget):
         headerLayout.setSpacing(2)
         headerLayout.setContentsMargins(1, 1, 1, 1)
         headerLayout.setAlignment(Qt.AlignLeading | Qt.AlignLeft | Qt.AlignVCenter)
-
+        self.motorWidget = None
         # Safe MotorWidget creation (give it a parent)
         try:
             self.motorWidget = MotorWidget(parent=self)
@@ -1411,6 +1411,13 @@ class MoveWidget(QWidget):
 
     def set_connection(self, conn):
         self.conn = conn
+        if self.motorWidget is not None and self.selected_motor:
+            # rebuild the motor with the live connection
+            mw = MotorWidget(motmne=self.selected_motor, spec=conn, parent=self)
+            self.moveLayout.replaceWidget(self.motorWidget, mw)
+            self.motorWidget.deleteLater()
+            self.motorWidget = mw
+
 
     def setDataSource(self, datasource):
         self.datasource_ref = datasource
@@ -1466,11 +1473,9 @@ class MoveWidget(QWidget):
             if self.motorWidget is not None:
                 self.motorWidget.setTargetPosition(txt)
 
-
     def setSelectedMotor(self, motor):
         self.blockSignals(True)
 
-        # Don't assume datablock/datasource are present
         motormne = None
         if motor in self.motormnes:
             motormne = motor
@@ -1479,53 +1484,44 @@ class MoveWidget(QWidget):
             if can in self.motormnes:
                 motormne = can
 
-        # Do not force the combo back to index 0 if we can't build a MotorWidget
         if motormne:
             idx = self.motormnes.index(motormne) + 1
             self.motorCombo.setCurrentIndex(idx)
 
-            # Try to attach the detailed motor panel if a datasource was provided
-            mw = None
+            # get a live spec connection from datasource or fallback
+            spec_conn = None
             if callable(self.datasource_ref):
-                try:
-                    mw = self.datasource_ref().getMotorWidget(motormne)
-                except Exception:
-                    mw = None
+                src = self.datasource_ref()
+                spec_conn = getattr(src, "specConn", None)
+                if spec_conn is not None and hasattr(spec_conn, "server_conn"):
+                    spec_conn = spec_conn.server_conn
+            if spec_conn is None:
+                spec_conn = self.conn
 
-        # Replace the inline widget safely
-        if self.motorWidget is not None:
-            self.motorWidget.hide()
-            self.moveLayout.removeWidget(self.motorWidget)
+            # build embedded MotorWidget with real connection
+            mw = MotorWidget(motmne=motormne, spec=spec_conn, parent=self)
 
-        self.motorWidget = mw or getattr(self, "emptyMotorWidget", None)
-        if self.motorWidget is not None:
-            # If it arrived already visible as a top-level, hide first
-            if self.motorWidget.isVisible():
-                self.motorWidget.hide()
+            # cleanup old widget
+            if self.motorWidget is not None:
+                self.moveLayout.removeWidget(self.motorWidget)
+                self.motorWidget.deleteLater()
 
-            # Nuke any top-level flags and native window; make it a child widget
-            self.motorWidget.setWindowFlags(Qt.Widget)              # <- critical (not setWindowFlag)
-            self.motorWidget.setAttribute(Qt.WA_NativeWindow, False)
-            self.motorWidget.setWindowModality(Qt.NonModal)
-
-            # Reparent BEFORE showing
-            self.motorWidget.setParent(self)
-
-            # Now insert and show embedded
+            self.motorWidget = mw
             self.moveLayout.insertWidget(1, self.motorWidget)
-            self.motorWidget.setVisible(True)
+            self.motorWidget.show()
             self.motorWidget.setDisabled(False)
 
+            # set move mode
+            current_mode = getattr(self, "_current_move_mode", "absolute")
+            if hasattr(self.motorWidget, "setMoveMode"):
+                self.motorWidget.setMoveMode(current_mode)
 
-        self.selected_motor = motormne
-       
-
-        current_mode = getattr(self, "_current_move_mode", "absolute")
-        if self.motorWidget is not None and hasattr(self.motorWidget, "setMoveMode"):
-            self.motorWidget.setMoveMode(current_mode)
+            self.selected_motor = motormne
 
         self._update()
         self.blockSignals(False)
+
+
 
     def _statsChanged(self, stats):
         try:
@@ -1654,7 +1650,6 @@ class ServerPanel(QWidget):
             self.scanWidget.set_connection(conn)
         if hasattr(self, "scanRunner"):
             self.scanRunner.set_connection(conn)
-
 
 
     def setDataSource(self, datasource):

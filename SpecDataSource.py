@@ -1058,6 +1058,28 @@ class SpecDataSource(DataSource1D):
             return self.specConn.isServerMode()
         else:
             return False
+    
+    def toggleShowSourceMarkers(self):
+        if getattr(self, "_source_markers_visible", True):
+            self._source_markers_visible = False
+            if hasattr(self.plot, "hideSourceMarkers"):
+                self.plot.hideSourceMarkers()
+        else:
+            self._source_markers_visible = True
+            if hasattr(self.plot, "showSourceMarkers"):
+                self.plot.showSourceMarkers()
+
+    def setSourceMarkersVisible(self, flag: bool):
+        self._source_markers_visible = flag
+        if flag:
+            if hasattr(self.plot, "showSourceMarkers"):
+                self.plot.showSourceMarkers()
+        else:
+            if hasattr(self.plot, "hideSourceMarkers"):
+                self.plot.hideSourceMarkers()
+
+    def isSourceMarkersVisible(self) -> bool:
+        return getattr(self, "_source_markers_visible", True)
 
     # server
     def getMotorWidget(self, motmne):
