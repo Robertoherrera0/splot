@@ -77,11 +77,11 @@ class _PlotlyCanvas:
         self._config = dict(
             displaylogo=False,
             responsive=True,
-            displayModeBar=True,     # always show the toolbar
-            scrollZoom=True,         # wheel zoom
-            doubleClick="reset",       # we'll implement our own dblclick reset
-            modeBarButtonsToRemove=[],   # keep Plotly's defaults (reset/auto-scale/etc.)
-            modeBarButtonsToAdd=[        # add a few handy extras
+            displayModeBar=True,     
+            scrollZoom=True,         
+            doubleClick="reset",     
+            modeBarButtonsToRemove=[],  
+            modeBarButtonsToAdd=[      
                 "zoomIn2d", "zoomOut2d",
                 "hoverCompareCartesian",
                 "toImage",
@@ -159,15 +159,26 @@ class _PlotlyCanvas:
     <style>
     html,body{{height:100%;width:100%;margin:0;background:transparent;}}
     #plot{{height:100%;width:100%;background:transparent;}}
+
+    /* Hover-to-show modebar */
     #plot .modebar{{
-        top:8px !important;       /* pull it down a bit */
-        right:8px !important;     /* pull it in from the right */
-        background:rgba(255,255,255,0.65);
-        border-radius:6px;
-        padding:2px;
+    opacity:0;
+    pointer-events:none;            /* don’t intercept clicks while hidden */
+    transition:opacity .12s ease;
+    top:8px !important;
+    right:8px !important;
+    background:rgba(255,255,255,0.65);
+    border-radius:6px;
+    padding:2px;
     }}
+    #plot:hover .modebar,
+    #plot.modebar-show .modebar{{     /* programmatic “flash” (below) */
+    opacity:1;
+    pointer-events:auto;
+    }}
+
     #plot .modebar-btn{{ opacity:0.85; }}
-    #plot .modebar-btn:hover{{ opacity:1; }}
+    #plot .modebar-btn:hover{{opacity:1; }}
     </style>
     </head>
     <body>
