@@ -494,6 +494,7 @@ class SpecPlotWidget(QWidget):
 
     def newScan(self, scanobj):
         self.scanobj = scanobj
+        self._clear_fit_overlays()
         if self.scanobj.isMesh() and self.plotmode == PLOT_1D:
             self.slice_widget.show()
         else: 

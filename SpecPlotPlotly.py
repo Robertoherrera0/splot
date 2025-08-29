@@ -804,7 +804,9 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         p = res.get("params", {})  # for gaussian: {"A","x0","sigma","B"}
         r2   = float(res.get("r2", float("nan")))
         x0   = float(res.get("x0", float("nan")))      # fitted center
-        fwhm = float(res.get("fwhm", float("nan")))
+        fwhm_raw = res.get("fwhm", None)          # None for Hill, float for Gaussian
+        fwhm = float(fwhm_raw) if fwhm_raw is not None else float("nan")
+
 
         # fitted peak y-value:
         #   Gaussian: ŷ(x0) = A + B
@@ -850,8 +852,13 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         except Exception:
             peak_max = None
 
+        if model == "gaussian":
+            peak_fit_val = float(p.get("x0", float("nan")))
+        else:  # hill
+            peak_fit_val = float(p.get("K", float("nan")))
+
         self._last_fit = {
-            "peak_fit": float(p.get("x0")) if p.get("x0") is not None else float("nan"),
+            "peak_fit": peak_fit_val,
             "fwhm": float(fwhm) if fwhm is not None else float("nan"),
             "r2": r2,
             "peak_max": peak_max,
