@@ -160,7 +160,7 @@ class MotorWidget(QWidget):
         self.motorLabel.setFont(font)
 
         self.currentLabel = QLabel()
-        self.currentLabel.setFixedWidth(10)
+        self.currentLabel.setFixedWidth(50)
 
         # --- NEW: mode dropdown (Abs/Rel) ---
         self.modeCombo = QComboBox()
@@ -267,12 +267,12 @@ class MotorWidget(QWidget):
             self._position = self.motor.get_position()
 
         # show current absolute position in the input
-        self.moveValue.setText("%0.4g" % self._position)
+        # self.moveValue.setText("%0.4g" % self._position)
         # optionally also mirror in the label if you want:
-        # self.currentLabel.setText("%0.4g" % self._position)
+        self.currentLabel.setText("%0.4g" % self._position)
 
         if self.state in [SpecMotor.MOVING, SpecMotor.MOVESTARTED]:
-            self.moveValue.setStyleSheet("background-color: #f0f033;")
+            self.moveValue.setStyleSheet("background-color: rgba(25, 25, 112, 200)")
             self.disable()
         elif self.state in [SpecMotor.UNUSABLE, SpecMotor.NOTINITIALIZED]:
             self.moveValue.setStyleSheet("background-color: #f033f0;")
