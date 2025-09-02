@@ -1,4 +1,4 @@
-# fit_models.py
+# SpecPlotFitModels.py
 from __future__ import annotations
 import numpy as np
 
@@ -11,6 +11,10 @@ except Exception:  # pragma: no cover
 def gaussian(x, A, x0, sigma, B):
     # A * exp(-(x-x0)^2 / (2 sigma^2)) + B
     return A * np.exp(-0.5 * ((x - x0) / np.maximum(sigma, 1e-12)) ** 2) + B
+
+def supergaussian(x, A, x0, sigma, m, B):
+    # A * exp(-( (x-x0)/sigma )^(2m) / 2) + B
+    return A * np.exp(-0.5 * np.abs((x - x0) / np.maximum(sigma, 1e-12)) ** (2 * np.maximum(m, 1e-9))) + B
 
 def hill(x, y0, A, K, n):
     # y = y0 + A * x^n / (K^n + x^n)   (increasing Hill)
@@ -37,6 +41,12 @@ def _guess_gaussian(x, y):
     sigma = float(width / 2.354820045)  # FWHM = 2*sqrt(2ln2)*sigma
     return (A, x0, sigma, B)
 
+def _guess_supergaussian(x, y):
+    # start from gaussian guess + m ~ 2
+    A, x0, sigma, B = _guess_gaussian(x, y)
+    m = 2.0
+    return (A, x0, sigma, m, B)
+
 def _guess_hill(x, y):
     x = np.asarray(x); y = np.asarray(y)
     y0 = float(np.nanmin(y))
@@ -55,7 +65,7 @@ def _guess_hill(x, y):
 def fit_curve(x, y, model: str):
     """
     Returns dict:
-      {'model': 'gaussian'|'hill', 'popt': array, 'pcov': array|None,
+      {'model': ..., 'popt': array, 'pcov': array|None,
        'params': {name: value}, 'stderr': {name: se}|None,
        'x0': center, 'fwhm': fwhm_or_None, 'r2': r2}
     """
@@ -71,11 +81,17 @@ def fit_curve(x, y, model: str):
         p0 = _guess_gaussian(x, y)
         names = ("A", "x0", "sigma", "B")
         bounds = (-np.inf, np.inf)
+    elif model == "supergaussian":
+        fn = supergaussian
+        p0 = _guess_supergaussian(x, y)
+        names = ("A", "x0", "sigma", "m", "B")
+        lb = (-np.inf, -np.inf, 1e-12, 0.5, -np.inf)
+        ub = ( np.inf,  np.inf,  np.inf, 10.0,  np.inf)
+        bounds = (lb, ub)
     elif model == "hill":
         fn = hill
         p0 = _guess_hill(x, y)
         names = ("y0", "A", "K", "n")
-        # reasonable bounds to keep it stable
         lb = (-np.inf, 0.0, 1e-12, 0.5)
         ub = ( np.inf,  np.inf, np.inf, 6.0)
         bounds = (lb, ub)
@@ -102,6 +118,11 @@ def fit_curve(x, y, model: str):
     fwhm = None
     if model == "gaussian":
         fwhm = 2.354820045 * params["sigma"]
+    elif model == "supergaussian":
+        # FWHM formula is approximate, depends on m
+        sigma = params["sigma"]
+        m = params["m"]
+        fwhm = 2 * sigma * (np.log(2.0) ** (1/(2*m)))
 
     return dict(
         model=model, popt=popt, pcov=pcov,

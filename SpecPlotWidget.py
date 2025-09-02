@@ -201,25 +201,26 @@ class SpecPlotWidget(QWidget):
         self.zoominAction.triggered.connect(self.zoomIn)
         self.zoominAction.setEnabled(False)
 
-        # --- the only two things we actually show: FIT menu + PRINT ---
         # Fit dropdown (default click runs Gaussian)
         self.fitButton = QToolButton(self)
-        self.fitButton.setIcon(icons.get_icon('fit'))   # fit.svg in icons/
+        self.fitButton.setIcon(icons.get_icon('fit'))
         self.fitButton.setToolTip("Fit data")
         self.fitButton.setPopupMode(QToolButton.MenuButtonPopup)
 
         fitMenu = QMenu(self.fitButton)
         act_gauss = fitMenu.addAction("Gaussian")
+        act_super = fitMenu.addAction("Super-Gaussian")
         act_hill  = fitMenu.addAction("Hill")
         fitMenu.addSeparator()
         act_clear = fitMenu.addAction("Clear fit")
 
         act_gauss.triggered.connect(lambda: self._do_fit("gaussian"))
+        act_super.triggered.connect(lambda: self._do_fit("supergaussian"))
         act_hill.triggered.connect(lambda: self._do_fit("hill"))
         act_clear.triggered.connect(self._clear_fit_overlays)
 
         self.fitButton.setMenu(fitMenu)
-        self.fitButton.clicked.connect(lambda: self._do_fit("gaussian"))  # default action on button click
+        self.fitButton.clicked.connect(lambda: self._do_fit("gaussian")) 
 
         # --- View dropdown (stats, source, markers) ---
         self.viewButton = QToolButton(self)
@@ -453,7 +454,6 @@ class SpecPlotWidget(QWidget):
             self.datablock.unsubscribe(self)
 
         # Connect with changes on associated datablock
-
         self.datablock = datablock
         self.datablock.subscribe(self, DATA_CHANGED, self.dataChanged)
         self.datablock.subscribe(self, STATS_UPDATED, self.statsChanged)

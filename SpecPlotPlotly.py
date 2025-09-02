@@ -752,7 +752,9 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         self._overlays.append(go.Scatter(**d))
 
     def fit_current(self, model: str = "gaussian"):
-        from SpecPlotFitModels import fit_curve, gaussian, hill
+        from SpecPlotFitModels import fit_curve, gaussian, supergaussian, hill
+        import plotly.graph_objects as go
+        import numpy as np
 
         # 0) pull current curve data (or selected region)
         curve, x, y = self._data_for_fit()
@@ -774,14 +776,22 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         if model == "gaussian":
             yfit = gaussian(xgrid, *res["popt"])
             name = f"{curve.mne} • Gaussian fit"
-            # optional: update vertical markers
             try:
                 self._set_vertical_marker("PEAK", res.get("x0"))
                 if res.get("fwhm") is not None:
                     self._set_vertical_marker("FWHM", res.get("x0"))
             except Exception:
                 pass
-        else:
+        elif model == "supergaussian":
+            yfit = supergaussian(xgrid, *res["popt"])
+            name = f"{curve.mne} • Super-Gaussian fit"
+            try:
+                self._set_vertical_marker("PEAK", res.get("x0"))
+                if res.get("fwhm") is not None:
+                    self._set_vertical_marker("FWHM", res.get("x0"))
+            except Exception:
+                pass
+        else:  # hill
             yfit = hill(xgrid, *res["popt"])
             name = f"{curve.mne} • Hill fit"
 
@@ -800,24 +810,25 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         )
         self._add_overlay(tr, tag="overlay::fit")
 
-        # 5) compact summary badge (top-left) — built ONLY from fitter outputs
-        p = res.get("params", {})  # for gaussian: {"A","x0","sigma","B"}
+        # 5) compact summary badge
+        p = res.get("params", {})
         r2   = float(res.get("r2", float("nan")))
-        x0   = float(res.get("x0", float("nan")))      # fitted center
-        fwhm_raw = res.get("fwhm", None)          # None for Hill, float for Gaussian
+        x0   = float(res.get("x0", float("nan")))
+        fwhm_raw = res.get("fwhm", None)
         fwhm = float(fwhm_raw) if fwhm_raw is not None else float("nan")
 
-
-        # fitted peak y-value:
-        #   Gaussian: ŷ(x0) = A + B
-        #   Other models: take max of the fitted curve we just computed
         if model == "gaussian":
             A = float(p.get("A", float("nan")))
             B = float(p.get("B", 0.0))
             yhat = A + B if np.isfinite(A) and np.isfinite(B) else float("nan")
-        else:
+        elif model == "supergaussian":
+            # similar formula: peak at x0, ŷ = A + B
+            A = float(p.get("A", float("nan")))
+            B = float(p.get("B", 0.0))
+            yhat = A + B if np.isfinite(A) and np.isfinite(B) else float("nan")
+        else:  # hill
             i_max = int(np.nanargmax(yfit))
-            x0 = float(xgrid[i_max])   # fitted peak x (for non-Gaussian)
+            x0 = float(xgrid[i_max])
             yhat = float(yfit[i_max])
 
         parts = [f"{model.upper()}", f"R²={r2:.3f}"]
@@ -829,40 +840,17 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         self._canvas.add_annotation(dict(
             x=0.01, y=0.99, xref="paper", yref="paper",
             text=summary, showarrow=False, font=dict(size=11), align="left",
-            bgcolor="rgba(255,255,255,0.85)",   # white background
-            bordercolor="rgba(0,0,0,0.25)",    # subtle border
-            borderwidth=1,
-            borderpad=3,
+            bgcolor="rgba(255,255,255,0.85)",
+            bordercolor="rgba(0,0,0,0.25)",
+            borderwidth=1, borderpad=3,
             meta="ann::fit"
         ))
 
-        # also stash for programmatic access
         self._last_fit = {
             "peak_fit_x": x0,
             "peak_fit_y": yhat,
             "fwhm": fwhm,
             "r2": r2,
-        }
-        self.fitResultsReady.emit(self._last_fit)
-
-        # 6) stash/export a few values for others to consume
-        try:
-            ymax_idx = int(np.argmax(y))
-            peak_max = float(x[ymax_idx])
-        except Exception:
-            peak_max = None
-
-        if model == "gaussian":
-            peak_fit_val = float(p.get("x0", float("nan")))
-        else:  # hill
-            peak_fit_val = float(p.get("K", float("nan")))
-
-        self._last_fit = {
-            "peak_fit": peak_fit_val,
-            "fwhm": float(fwhm) if fwhm is not None else float("nan"),
-            "r2": r2,
-            "peak_max": peak_max,
-            "com": float(np.sum(x * y) / np.sum(y)) if np.sum(y) > 0 else None,
         }
         self.fitResultsReady.emit(self._last_fit)
 
