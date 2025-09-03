@@ -154,18 +154,14 @@ class MotorWidget(QWidget):
         self.setLayout(motorLayout)
 
         # Motor label
-        # Motor name label
         self.motorLabel = QLabel(self.motmne or "")
         self.motorLabel.setStyleSheet("font-weight:600; color:#2b2b2b;")
 
-        # Current position display in its own box
+        # Current position display (no box/border now)
         self.currentLabel = QLabel("—")
-        self.currentLabel.setFixedWidth(60)
+        self.currentLabel.setFixedWidth(40)
         self.currentLabel.setAlignment(Qt.AlignCenter)
         self.currentLabel.setStyleSheet("""
-            background-color: #f9f9f9;
-            border: 1px solid #dcdfe3;
-            border-radius: 4px;
             padding: 2px;
             font-size: 9pt;
             color: #333333;
