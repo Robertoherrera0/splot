@@ -38,7 +38,7 @@ from pyspec.graphics.QVariant import *
 
 from pyspec.client import SpecMotor 
 from pyspec.css_logger import log
-
+from PySide6.QtWidgets import QFrame, QLabel, QHBoxLayout
 from StopButton import StopButton
 
 
@@ -154,13 +154,30 @@ class MotorWidget(QWidget):
         self.setLayout(motorLayout)
 
         # Motor label
-        self.motorLabel = QLabel()
-        font = self.motorLabel.font()
-        font.setBold(True)
-        self.motorLabel.setFont(font)
+        # Motor name label
+        self.motorLabel = QLabel(self.motmne or "")
+        self.motorLabel.setStyleSheet("font-weight:600; color:#2b2b2b;")
 
-        self.currentLabel = QLabel()
-        self.currentLabel.setFixedWidth(50)
+        # Current position display in its own box
+        self.currentLabel = QLabel("—")
+        self.currentLabel.setFixedWidth(60)
+        self.currentLabel.setAlignment(Qt.AlignCenter)
+        self.currentLabel.setStyleSheet("""
+            background-color: #f9f9f9;
+            border: 1px solid #dcdfe3;
+            border-radius: 4px;
+            padding: 2px;
+            font-size: 9pt;
+            color: #333333;
+        """)
+
+        # Group motor label + position together
+        labelLayout = QVBoxLayout()
+        labelLayout.setContentsMargins(0, 0, 0, 0)
+        labelLayout.setSpacing(2)
+        labelLayout.addWidget(self.motorLabel)
+        labelLayout.addWidget(self.currentLabel)
+
 
         # --- NEW: mode dropdown (Abs/Rel) ---
         self.modeCombo = QComboBox()
@@ -173,16 +190,16 @@ class MotorWidget(QWidget):
 
 
         self.moveValue = QLineEdit()
-        self.moveValue.setFixedWidth(70)
+        self.moveValue.setFixedWidth(60)
         self.moveValue.returnPressed.connect(self.doMove)
         self.moveValue.textEdited.connect(self.positionEdited)
 
         self.goButton = QPushButton("Move")
-        self.goButton.setFixedWidth(50)
+        self.goButton.setFixedWidth(60)
         self.goButton.clicked.connect(self.doMove)
 
         self.cancelButton = QPushButton("Cancel")
-        self.cancelButton.setFixedWidth(60)
+        self.cancelButton.setFixedWidth(70)
         self.cancelButton.clicked.connect(self.cancelMove)
         self.cancelButton.setEnabled(False)
 
@@ -197,9 +214,10 @@ class MotorWidget(QWidget):
         motorLayout.addWidget(self.currentLabel)
         # motorLayout.addWidget(self.modeCombo)
         motorLayout.addWidget(self.moveValue)
+        motorLayout.addItem(QSpacerItem(20, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+   
         motorLayout.addWidget(self.goButton)
         motorLayout.addWidget(self.cancelButton)
-        motorLayout.addWidget(spacer)
 
         if motmne and spec:
             cb = {
@@ -249,11 +267,7 @@ class MotorWidget(QWidget):
         self.update()
 
     def update(self):
-        # if not self.is_shown:
-        #     return
-
         self.motorLabel.setText(self.motmne)
-
         self.blockSignals(True)
 
         if self.modified:
@@ -266,20 +280,26 @@ class MotorWidget(QWidget):
         if self._position is None:
             self._position = self.motor.get_position()
 
+        # show current absolute position
+        self.currentLabel.setText("%0.4g" % self._position)
+
         # show current absolute position in the input
         # self.moveValue.setText("%0.4g" % self._position)
         # optionally also mirror in the label if you want:
-        self.currentLabel.setText("%0.4g" % self._position)
+        # self.currentLabel.setText("%0.4g" % self._position)
 
         if self.state in [SpecMotor.MOVING, SpecMotor.MOVESTARTED]:
-            self.moveValue.setStyleSheet("background-color: rgba(25, 25, 112, 200)")
+            # match MotorTable moving highlight
+            self.moveValue.setStyleSheet("background-color: #e6f3ff;")
             self.disable()
         elif self.state in [SpecMotor.UNUSABLE, SpecMotor.NOTINITIALIZED]:
-            self.moveValue.setStyleSheet("background-color: #f033f0;")
+            # instead of magenta, just show white (neutral)
+            self.moveValue.setStyleSheet("background-color: #ffffff;")
             self.disable()
         elif self.state in [SpecMotor.READY, SpecMotor.ONLIMIT]:
             self.moveValue.setStyleSheet("background-color: #ffffff;")
             self.enable()
+
         self.blockSignals(False)
 
     def motor_position_changed(self, newpos):
