@@ -252,7 +252,7 @@ class SpecPlotWidget(QWidget):
         # Printer
         self.printAction = QAction(icons.get_icon('printer'), "Print", self)
         self.printAction.setStatusTip('Print Plot')
-        self.printAction.triggered.connect(self.printPlot)
+        self.printAction.triggered.connect(self._handle_print)
 
         # Add only the two visible controls
         self.toolbar.addWidget(self.fitButton)
@@ -722,6 +722,15 @@ class SpecPlotWidget(QWidget):
 
     def getTitle(self):
         return  self.plotHeader.getTitle()
+
+    def _handle_print(self):
+        title = self.plotHeader.getTitle()
+        if hasattr(self.plot, "printOrExport"):
+            # Plotly backend
+            self.plot.printOrExport(self)
+        else:
+            # Fallback: legacy matplotlib backend
+            self.printPlot(title)
 
     # BEGIN print plot
     def printPlot(self, mute=False, filename=None):

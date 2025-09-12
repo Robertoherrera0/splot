@@ -44,8 +44,6 @@ class _PlotlyBridge(QObject):
 
 
 # ------------------------- Legend placement map -------------------------
-
-# Map your existing legend keywords to Plotly anchors
 _PLOTLY_LEGEND_POS = {
     "auto":       ("right", "top",   1.0, 1.0),
     "top_right":  ("right", "top",   1.0, 1.0),
@@ -80,11 +78,10 @@ class _PlotlyCanvas:
             displayModeBar=True,     
             scrollZoom=True,         
             doubleClick="reset",     
-            modeBarButtonsToRemove=[],  
+            modeBarButtonsToRemove=["toImage"],  
             modeBarButtonsToAdd=[      
                 "zoomIn2d", "zoomOut2d",
                 "hoverCompareCartesian",
-                "toImage",
             ],
         )
 
@@ -546,7 +543,6 @@ class _DebugPage(QWebEnginePage):
         print(f"[JS {name}] {message}  ({sourceID}:{lineNumber})")
 
 class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
-    # Signals (match your Matplotlib version)
     pointSelected = Signal(str, float)
     regionSelected = Signal(str, float, float)
     configurationChanged = Signal()
@@ -886,7 +882,6 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         curve = SpecPlotCurvePlotly(colname, self)
         self.curves[colname] = curve
 
-        # styling (mirrors your Matplotlib setup)
         color = self.colorTable.getColor(colname)
         curve.setColor(color)
         curve.showErrorBars(self.showbars)
@@ -1239,6 +1234,130 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         self._canvas.remove_annotations_with_meta("ann::fit")
         self.queue_replot()
 
+    # ------------------------- Printing / Export -------------------------
+    def printOrExport(self, parent=None):
+        """
+        Save Plotly plot as PDF/PNG/SVG/JPEG.
+        Always opens in the user's home directory.
+        """
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        from pathlib import Path
+        import os
+
+        # Start in user's home directory
+        home_dir = str(Path.home())
+
+        filters = "PDF (*.pdf);;PNG (*.png);;SVG (*.svg);;JPEG (*.jpg);;All files (*)"
+        filename, selected_filter = QFileDialog.getSaveFileName(
+            parent,
+            "Save Plot",
+            home_dir,   # <- start here
+            filters
+        )
+        if not filename:
+            return
+
+        # Infer extension if missing
+        ext = Path(filename).suffix.lower()
+        if not ext:
+            if "pdf" in selected_filter.lower():
+                ext = ".pdf"
+            elif "svg" in selected_filter.lower():
+                ext = ".svg"
+            elif "jpg" in selected_filter.lower() or "jpeg" in selected_filter.lower():
+                ext = ".jpg"
+            else:
+                ext = ".png"
+            filename += ext
+
+        # Handle PDF via Qt printer (vector-safe)
+        if ext == ".pdf":
+            from PySide6.QtPrintSupport import QPrinter
+            from PySide6.QtGui import QPainter
+            from PySide6.QtCore import QSize
+
+            printer = QPrinter(QPrinter.HighResolution)
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(filename)
+
+            pix = self._web.grab()
+            painter = QPainter(printer)
+
+            page_rect = printer.pageRect(QPrinter.DevicePixel)
+            target_size = QSize(int(page_rect.width()), int(page_rect.height()))
+
+            scaled = pix.scaled(
+                target_size,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+            x = (target_size.width() - scaled.width()) // 2
+            y = (target_size.height() - scaled.height()) // 2
+            painter.drawPixmap(x, y, scaled)
+
+            painter.end()
+            print(f"[EXPORT] Wrote PDF via Qt: {filename}")
+            return
+
+        # Other formats (PNG, SVG, JPG) via Plotly/kaleido
+        try:
+            self._export_current_plot(filename, format=ext.lstrip("."))
+            print(f"[EXPORT] Wrote {filename} via kaleido")
+        except Exception as e:
+            print(f"[EXPORT] Kaleido export failed: {e}, fallback to raster grab")
+            pix = self._web.grab()
+            if not pix.save(filename):
+                QMessageBox.warning(parent, "Save failed", f"Could not save to {filename}")
+
+
+    def _export_current_plot(self, filename: str, format: str = "png"):
+        import plotly.graph_objects as go
+        import plotly.io as pio
+
+        traces = []
+        for c in self.curves.values():
+            if c.isAttached():
+                tr = c.to_trace()
+                if tr:
+                    traces.append(tr)
+        if self._overlays:
+            traces.extend(self._overlays)
+        if not traces:
+            traces = [go.Scatter(x=[0, 1], y=[0, 1], mode="lines",
+                                line=dict(width=0), showlegend=False, hoverinfo="skip", name="")]
+
+        fig = go.Figure(data=traces)
+        cols = self._theme_colors()
+        fig.update_layout(
+            paper_bgcolor=cols["paper"],
+            plot_bgcolor=cols["plot"],
+            margin=dict(l=50, r=20, t=30, b=40),
+        )
+        if format == "pdf":
+            pio.write_image(fig, filename, format="pdf", width=1920, height=1080, scale=2)
+        else:
+            pio.write_image(fig, filename, format=format, width=1280, height=720, scale=2)
+
+
+    def printPlot(self, title="", printer=None, filename=None):
+        # Legacy compatibility.
+        if filename:
+            self.printOrExport()
+            return
+
+        from PySide6.QtPrintSupport import QPrinter, QPrintDialog
+        from PySide6.QtGui import QPainter
+
+        printer = QPrinter(QPrinter.HighResolution)
+        dlg = QPrintDialog(printer)
+        if dlg.exec() == QPrintDialog.Rejected:
+            return
+
+        pix = self._web.grab()
+        painter = QPainter(printer)
+        painter.drawPixmap(0, 0, pix)
+        painter.end()
+        print("[PRINT] Sent plot to printer")
 
 
 # ------------------------- Local test -------------------------
