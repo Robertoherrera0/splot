@@ -177,7 +177,6 @@ class SpecFileSource(DataSource1D):
             }
         """)
 
-
         self.spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.idBox.addWidget(self.fileLabel, 0, 0)
@@ -408,7 +407,7 @@ class SpecFileSource(DataSource1D):
 
     
     def selectionChanged(self):
-        """Overlay all selected scans in the plot."""
+        """Overlay all selected scans in the plot, but update metadata only for the first one."""
         selected_indices = [
             idx for idx, item in enumerate(self.treeItems) if item.isSelected()
         ]
@@ -421,7 +420,34 @@ class SpecFileSource(DataSource1D):
         if hasattr(self.plot, "curves"):
             self.plot.curves.clear()
 
-        # Add one curve per selected scan
+        # --- update metadata for primary scan WITHOUT resetting selection
+        primary_scanno = selected_indices[0]
+        try:
+            scan = self.sf[primary_scanno]
+            self.currentScan = scan
+            self.scanselected = primary_scanno
+
+            data = scan.getData()
+            labels = scan.getLabels()
+            scanmeta = {
+                'title': f"Scan {scan.getNumber()} - {scan.getCommand()}",
+                'command': scan.getCommand(),
+                'scanno': scan.getNumber(),
+            }
+            scanmeta.update(scan.getMeta())
+
+            self.metadata = {}
+            self.metadata.update(scanmeta)
+
+            # refresh datasource
+            self.setData(data, labels, scanmeta)
+
+        except Exception as e:
+            import traceback
+            log.log(2, f"Error setting primary scan metadata: {e}")
+            log.log(2, traceback.format_exc())
+
+        # --- plot all selected scans (overlay)
         for scanno in selected_indices:
             try:
                 scan = self.sf[scanno]
@@ -437,18 +463,13 @@ class SpecFileSource(DataSource1D):
                 y = data[:, -1]
 
                 curve_name = f"scan{num}_{labels[-1]}"
-
-                # Register the curve
                 self.plot.addCurve(curve_name)
                 curve = self.plot.curves[curve_name]
 
-                # Fill in data
                 curve._x = x
                 curve._y = y
                 curve.attach()
                 curve.setColor(self.plot.colorTable.getColor(curve_name))
-
-                # Use scan number + command for legend entry
                 curve.mne = f"Scan {num}: {cmd}"
 
             except Exception as e:
@@ -458,7 +479,6 @@ class SpecFileSource(DataSource1D):
 
         # Force redraw
         self.plot.queue_replot()
-
 
 
     def getAllItems(self):
