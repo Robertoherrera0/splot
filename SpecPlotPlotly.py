@@ -1206,6 +1206,7 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
 
     def toggleY1Log(self):
         self.y1log = not getattr(self, "y1log", False)
+        self.y2log = self.y1log
         self.queue_replot()
 
     def toggleY2Log(self):
