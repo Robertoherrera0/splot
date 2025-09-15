@@ -301,22 +301,75 @@ class SpecFileSource(DataSource1D):
         #     before it is clicked
         self.setActive()
 
-    def selectionChanged(self):
-        scanno = None
-        for item in self.getAllItems():
-            if item.isSelected():
-                itemno = 0
-                for titem in self.treeItems:
-                    if item is titem:
-                        scanno = itemno
-                        break
-                    itemno += 1
-                break
+    # def selectionChanged(self):
+    #     scanno = None
+    #     for item in self.getAllItems():
+    #         if item.isSelected():
+    #             itemno = 0
+    #             for titem in self.treeItems:
+    #                 if item is titem:
+    #                     scanno = itemno
+    #                     break
+    #                 itemno += 1
+    #             break
 
-        if scanno is None:
-            log.log(3,"No scan selected")
-        else:
-            self.selectScan(scanno)
+    #     if scanno is None:
+    #         log.log(3,"No scan selected")
+    #     else:
+    #         self.selectScan(scanno)
+    def selectionChanged(self):
+        """Overlay all selected scans in the plot (replace mode)."""
+        selected_indices = [
+            idx for idx, item in enumerate(self.treeItems) if item.isSelected()
+        ]
+
+        if not selected_indices:
+            log.log(3, "No scans selected")
+            return
+
+        # Clear existing curves
+        if hasattr(self.plot, "curves"):
+            self.plot.curves.clear()
+
+        # Add one curve per selected scan
+        for scanno in selected_indices:
+            try:
+                scan = self.sf[scanno]
+                data = scan.getData()
+                labels = scan.getLabels()
+                num = scan.getNumber()
+                cmd = scan.getCommand()
+
+                if not data.any() or len(labels) < 2:
+                    continue
+
+                x = data[:, 0]
+                y = data[:, -1]
+
+                curve_name = f"scan{num}_{labels[-1]}"
+
+                # Register the curve
+                self.plot.addCurve(curve_name)
+                curve = self.plot.curves[curve_name]
+
+                # Fill in data
+                curve._x = x
+                curve._y = y
+                curve.attach()
+                curve.setColor(self.plot.colorTable.getColor(curve_name))
+
+                # Use scan number + command for legend entry
+                curve.mne = f"Scan {num}: {cmd}"
+
+            except Exception as e:
+                import traceback
+                log.log(2, f"Error overlaying scan {scanno}: {e}")
+                log.log(2, traceback.format_exc())
+
+        # Force redraw
+        self.plot.queue_replot()
+
+
 
     def getAllItems(self):
         root = self.scantree.invisibleRootItem()
