@@ -124,11 +124,11 @@ class ColumnTreeItem(QTreeWidgetItem):
         self.tree.setItemWidget(self, DUP_COLUMN, self.selectButton)
         self.tree.setItemWidget(self, SPACER_COLUMN, self.spacerLabel)
         #self.xbutton.clicked.connect(self.xChanged)
-
         self.buttonGroup.buttonClicked.connect(self.ySelectionChanged)
 
         self.colorWidget.colorChanged.connect(self.colorChanged)
         self.selectButton.clicked.connect(self._addToSelection)
+        
 
     def setColumnName(self, colname):
         self.columnName = colname
@@ -332,6 +332,7 @@ class ColumnSelectionWidget(QWidget):
         self.actionWidget = QWidget()
         self.actionLayout = QHBoxLayout()
         self.actionWidget.setLayout(self.actionLayout)
+        
 
         self.resetButton = QPushButton("Reset to Default")
 
@@ -346,7 +347,50 @@ class ColumnSelectionWidget(QWidget):
             self.modeCombo.currentIndexChanged.connect(self.modeComboChanged)
 
         self.actionLayout.addWidget(self.resetButton)
+        
+        # --- Style for Mode dropdown and Reset button ---
+        self.actionWidget.setStyleSheet("""
+            /* ComboBox */
+            QComboBox {
+                background-color: #ffffff;
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-size: 10pt;
+                font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
+                max-width: 60px; 
+            }
+            QComboBox::drop-down {
+                border: none;
+                background: transparent;
+                width: 16px;
+            }
+            QComboBox QAbstractItemView {
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+                background: #ffffff;
+                selection-background-color: #dbeafe;
+                selection-color: #0f172a;
+                outline: none;
+                padding: 2px;
+            }
 
+            /* Reset button */
+            QPushButton {
+                background-color: #f5f5f5;
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-size: 10pt;
+                font-family: 'Segoe UI', 'IBM Plex Sans', sans-serif;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+            }
+            QPushButton:pressed {
+                background-color: #d6d6d6;
+            }
+        """)
         self.extraLabel = QLabel("Added columns:")
 
         self.setLayout(layout)
@@ -370,11 +414,13 @@ class ColumnSelectionWidget(QWidget):
 
         self.extraLabel.hide()
         self.extraTreeWidget.hide()
+        
 
         layout.addWidget(self.actionWidget)
         layout.addWidget(self.treeWidget, 2)
         layout.addWidget(self.extraLabel)
         layout.addWidget(self.extraTreeWidget)
+
 
     def initTree(self):
 
@@ -405,6 +451,29 @@ class ColumnSelectionWidget(QWidget):
             self.treeWidget.header().resizeSection(colno, column_width)
 
         self.treeWidget.setHeaderLabels( self.header_labels )
+        self.treeWidget.setStyleSheet("""
+            QTreeWidget#columnSelectionWidget {
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+                background: #ffffff;
+                alternate-background-color: #fafafa;
+                font-size: 10pt;
+            }
+            QTreeWidget#columnSelectionWidget::item:selected {
+                background-color: #dbeafe;
+                color: #0f172a;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                border: 0px;
+                border-bottom: 1px solid #d0d0d0;
+                padding: 2px 4px;
+                font-size: 9pt;
+                font-weight: 400;
+                color: #444444;
+            }
+        """)
+
 
         #self.columnArea.setAlignment(Qt.AlignHCenter)
         #self.columnArea.setWidget(self.treeWidget)
@@ -434,6 +503,29 @@ class ColumnSelectionWidget(QWidget):
             self.extraTreeWidget.header().resizeSection(colno, column_width)
 
         self.extraTreeWidget.setHeaderLabels(self.extra_header_labels)
+        self.extraTreeWidget.setStyleSheet("""
+            QTreeWidget {
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+                background: #ffffff;
+                alternate-background-color: #fafafa;
+                font-size: 10pt;
+            }
+            QTreeWidget::item:selected {
+                background-color: #dbeafe;
+                color: #0f172a;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                border: 0px;
+                border-bottom: 1px solid #d0d0d0;
+                padding: 2px 4px;
+                font-size: 9pt;
+                font-weight: 400;
+                color: #444444;
+            }
+        """)
+
 
     def setDataBlock(self, dblock):
 

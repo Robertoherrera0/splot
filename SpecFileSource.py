@@ -91,10 +91,22 @@ class SpecFileSource(DataSource1D):
         self.idBox = QGridLayout()
         self.fileIDCard.setLayout(self.idBox)
 
-        self.fileLabel = QLabel("Filename:")
+        self.fileLabel = QLabel("Current Filename:")
         self.fileNameLabel = QLabel()
         self.fileNameLabel.setObjectName("filename")
         self.spacer = QLabel()
+        self.fileLabel.setStyleSheet("""
+            color: #555555;
+            font-size: 9pt;
+            font-weight: 500;
+        """)
+
+        self.fileNameLabel.setStyleSheet("""
+            color: #222222;
+            font-size: 10pt;
+            font-weight: 600;
+        """)
+
 
         self.buttonLayout = QHBoxLayout()
         self.buttonLayout.setContentsMargins(0,0,0,0)
@@ -120,6 +132,51 @@ class SpecFileSource(DataSource1D):
         self.infoBox = QTreeWidget()
         self.infoBox.setObjectName("fileinfo")
         self.infoBox.setAlternatingRowColors(True)
+        self.infoBox.setStyleSheet("""
+            QTreeWidget#fileinfo {
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+                background: #ffffff;
+                alternate-background-color: #fafafa;
+                font-size: 10pt;
+            }
+            QTreeWidget#fileinfo::item {
+                padding: 4px 6px;
+            }
+            QTreeWidget#fileinfo::item:selected {
+                background-color: #dbeafe;   /* soft blue */
+                color: #0f172a;
+                border-radius: 4px;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 2px 4px;
+                border: 0px;
+                border-bottom: 1px solid #d0d0d0;
+                font-size: 9pt;        /* smaller header text */
+                font-weight: 400;      /* lighter */
+                color: #444444;        /* softer gray */
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #f0f0f0;
+                width: 10px;
+                margin: 0px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                min-height: 20px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a0a0a0;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0;
+            }
+        """)
+
 
         self.spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
@@ -136,6 +193,54 @@ class SpecFileSource(DataSource1D):
             self.scantree.setSelectionMode(QAbstractItemView.ExtendedSelection)
         except AttributeError:
             self.scantree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.scantree.setStyleSheet("""
+            QTreeWidget#scantree {
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+                background: #ffffff;
+                alternate-background-color: #fafafa;
+                font-size: 10pt;
+            }
+            QTreeWidget#scantree::item {
+                padding: 4px 6px;
+            }
+            QTreeWidget#scantree::item:selected {
+                background-color: #dbeafe;   /* soft blue */
+                color: #0f172a;              /* dark text */
+                border-radius: 4px;
+            }
+            QTreeWidget#scantree::item:selected:active {
+                background-color: #bfdbfe;   /* darker blue when active */
+            }
+            QTreeWidget#scantree::item:selected:!active {
+                background-color: #e0e7ff;   /* lighter when not focused */
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 2px 4px;
+                border: 0px;
+                border-bottom: 1px solid #d0d0d0;
+                font-weight: 400;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #f0f0f0;
+                width: 10px;
+                margin: 0px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                min-height: 20px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a0a0a0;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0;
+            }
+        """)
 
         self.scantree.setHeaderLabels(["#", "Scan command"])
         self.scantree.setRootIsDecorated(False)
@@ -212,8 +317,8 @@ class SpecFileSource(DataSource1D):
     def _updateFileInfo(self):
 
         self.infoBox.clear()
+        self.infoBox.setHeaderHidden(True)
         self.infoBox.setColumnCount(2)
-        self.infoBox.setHeaderLabels(["", ""])
         self.infoBox.setRootIsDecorated(False)
 
         created, modified, user, spec = self.sf.getInfo()
@@ -301,24 +406,9 @@ class SpecFileSource(DataSource1D):
         #     before it is clicked
         self.setActive()
 
-    # def selectionChanged(self):
-    #     scanno = None
-    #     for item in self.getAllItems():
-    #         if item.isSelected():
-    #             itemno = 0
-    #             for titem in self.treeItems:
-    #                 if item is titem:
-    #                     scanno = itemno
-    #                     break
-    #                 itemno += 1
-    #             break
-
-    #     if scanno is None:
-    #         log.log(3,"No scan selected")
-    #     else:
-    #         self.selectScan(scanno)
+    
     def selectionChanged(self):
-        """Overlay all selected scans in the plot (replace mode)."""
+        """Overlay all selected scans in the plot."""
         selected_indices = [
             idx for idx, item in enumerate(self.treeItems) if item.isSelected()
         ]

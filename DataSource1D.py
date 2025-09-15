@@ -104,7 +104,7 @@ class DataSource1D(DataSource):
         self.columns_widget = ColumnSelectionWidget(self)
         self.columns_widget.setDataBlock(self.datablock)
         self.columns_widget.setColumnDataHandler(self._columnDataHandler)
-
+        
         self.add_source_tab(1, self.columns_widget,  "Plot")
 
     def show_metadata_widget(self, flag=True):
