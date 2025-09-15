@@ -82,44 +82,45 @@ class ScanMetadataWidget(QWidget):
         layout.setVerticalSpacing(4)
         self.setLayout(layout)
 
-        # --- Header frame ---
-        headerFrame = QFrame()
-        headerFrame.setObjectName("HeaderFrame")
-        headerFrame.setStyleSheet("""
-        QLabel {
-            font-family: 'IBM Plex Sans','Segoe UI',sans-serif;
-            font-size: 11px;
-            color: #555;
-        }
-        QLabel.value {
-            font-size: 12.5px;
-            font-weight: 600;
-            color: #222;
-        }
-
-        """)
+        # --- Header container ---
+        headerFrame = QWidget()
         headerLayout = QGridLayout(headerFrame)
-        headerLayout.setContentsMargins(12, 8, 12, 8)
-        headerLayout.setHorizontalSpacing(25)
-        headerLayout.setVerticalSpacing(6)
+        headerLayout.setContentsMargins(0, 0, 0, 4)
+        headerLayout.setHorizontalSpacing(20)
+        headerLayout.setVerticalSpacing(2)
+
+        # --- Label + Value style (subtle, like File Info) ---
+        labelStyle = """
+            font-family: 'IBM Plex Sans','Segoe UI',sans-serif;
+            font-size: 9pt;
+            color: #555555;
+        """
+        valueStyle = """
+            font-family: 'IBM Plex Sans','Segoe UI',sans-serif;
+            font-size: 9pt;
+            color: #222222;
+        """
+
+        def makeLabel(text, isValue=False):
+            w = QLabel(text)
+            w.setStyleSheet(valueStyle if isValue else labelStyle)
+            if isValue:
+                w.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            return w
 
         # --- Labels + Values ---
-        self.scanNoLabel   = QLabel("Scan Number:")
-        self.dateLabel     = QLabel("Date:")
-        self.hklLabel      = QLabel("HKL:")
-        self.pointsLabel   = QLabel("Total Points:")
-        self.columnsLabel  = QLabel("Columns:")
+        self.scanNoLabel   = makeLabel("Scan Number:")
+        self.scanNoValue   = makeLabel("", isValue=True)
+        self.pointsLabel   = makeLabel("Total Points:")
+        self.pointsValue   = makeLabel("", isValue=True)
 
-        self.scanNoValue   = QLabel("")
-        self.dateValue     = QLabel("")
-        self.hklValue      = QLabel("")
-        self.pointsValue   = QLabel("")
-        self.columnsValue  = QLabel("")
+        self.hklLabel      = makeLabel("HKL:")
+        self.hklValue      = makeLabel("", isValue=True)
+        self.columnsLabel  = makeLabel("Columns:")
+        self.columnsValue  = makeLabel("", isValue=True)
 
-        for w in (self.scanNoValue, self.dateValue, self.hklValue,
-                  self.pointsValue, self.columnsValue):
-            w.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            w.setObjectName("value")
+        self.dateLabel     = makeLabel("Date:")
+        self.dateValue     = makeLabel("", isValue=True)
 
         # --- Layout placement ---
         headerLayout.addWidget(self.scanNoLabel, 0, 0)
@@ -136,6 +137,7 @@ class ScanMetadataWidget(QWidget):
         headerLayout.addWidget(self.dateValue, 2, 1, 1, 3)
 
         layout.addWidget(headerFrame, 0, 0, 1, 5)
+
 
         # --- Tabs ---
         self.infoTabs = QTabWidget()
@@ -251,7 +253,8 @@ class ScanMetadataWidget(QWidget):
         layout.addWidget(self.dateValue,    2, 1, 1, 3)
 
         layout.addWidget(self.spacer,       0, 4, 3, 1)
-        layout.addWidget(self.infoTabs,     5, 0, 1, 3)
+        layout.addWidget(self.infoTabs, 5, 0, 1, 5)
+        self.infoTabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # let the tabs area take the horizontal/vertical space
         layout.setColumnStretch(0, 0)
