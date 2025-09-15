@@ -1199,6 +1199,19 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         # Basic fallback to image save
         self.saveAsImage(filename, title)
 
+    # ------------------- logs scale -----------------------------
+    def toggleXLog(self):
+        self.xlog = not getattr(self, "xlog", False)
+        self.queue_replot()
+
+    def toggleY1Log(self):
+        self.y1log = not getattr(self, "y1log", False)
+        self.queue_replot()
+
+    def toggleY2Log(self):
+        self.y2log = not getattr(self, "y2log", False)
+        self.queue_replot()
+
     # ---- Convenience for external calls (aligns with your old canvas API) ----
     def setXAxisLimits(self, x0, x1):
         self._setAxisLimits(X_AXIS, x0, x1)

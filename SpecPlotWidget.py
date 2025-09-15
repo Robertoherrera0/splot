@@ -204,23 +204,35 @@ class SpecPlotWidget(QWidget):
         # Fit dropdown (default click runs Gaussian)
         self.fitButton = QToolButton(self)
         self.fitButton.setIcon(icons.get_icon('fit'))
-        self.fitButton.setToolTip("Fit data")
+        self.fitButton.setToolTip("Fit and scale options")
         self.fitButton.setPopupMode(QToolButton.MenuButtonPopup)
 
         fitMenu = QMenu(self.fitButton)
+
+        # --- Fit models
         act_gauss = fitMenu.addAction("Gaussian")
         act_super = fitMenu.addAction("Super-Gaussian")
-        act_hill  = fitMenu.addAction("Hill")
+        # act_hill  = fitMenu.addAction("Hill")
+        
+        # --- Clear overlays
         fitMenu.addSeparator()
         act_clear = fitMenu.addAction("Clear fit")
 
+        # --- Scale options
+        fitMenu.addSeparator()
+        act_y1log = fitMenu.addAction("Toggle Y log scale")
+
+        # Wire up actions
         act_gauss.triggered.connect(lambda: self._do_fit("gaussian"))
         act_super.triggered.connect(lambda: self._do_fit("supergaussian"))
-        act_hill.triggered.connect(lambda: self._do_fit("hill"))
+        # act_hill.triggered.connect(lambda: self._do_fit("hill"))
+        act_y1log.triggered.connect(lambda: self.plot.toggleY1Log())
+
         act_clear.triggered.connect(self._clear_fit_overlays)
 
         self.fitButton.setMenu(fitMenu)
-        self.fitButton.clicked.connect(lambda: self._do_fit("gaussian")) 
+        self.fitButton.clicked.connect(lambda: self._do_fit("gaussian"))  # left-click default
+
 
         # --- View dropdown (stats, source, markers) ---
         self.viewButton = QToolButton(self)
