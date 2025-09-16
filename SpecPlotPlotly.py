@@ -340,28 +340,29 @@ class SpecPlotCurvePlotly(SpecPlotCurve):
         if not (self._x.any() and self._y.size):
             return None
 
-        yaxis_name = "y" if self.yaxis == Y1_AXIS else "y2"
+        y = self._y
 
+        yaxis_name = "y" if self.yaxis == Y1_AXIS else "y2"
         mode = "lines+markers" if (self.uselines and self.usedots) else \
-               ("lines" if self.uselines else "markers")
+            ("lines" if self.uselines else "markers")
 
         trace = go.Scatter(
             x=self._x.tolist(),
-            y=self._y.tolist(),
+            y=y.tolist(),
             name=self.mne,
             mode=mode,
             yaxis=yaxis_name,
             marker=dict(size=self.dotsize),
             line=dict(width=self.linethick),
         )
-        # color in your app is often a QColor or str; cast to str
         if self.color is not None:
             trace.marker.color = str(self.color)
             trace.line.color = str(self.color)
 
         if self.selected:
-            trace.update(legendrank=0)  # float to top
+            trace.update(legendrank=0)
         return trace
+
 
 
 # ------------------------- Marker wrappers (Plotly shapes/annotations) -------------------------
@@ -1042,11 +1043,8 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         if self._overlays:
             traces.extend(self._overlays)
 
-        fig = go.Figure(data=traces)   # <— add this line
         fig = go.Figure(data=traces)
-        fig = go.Figure(data=traces)
-        fig.update_xaxes(range=[0, 1])
-        fig.update_yaxes(range=[0, 1])
+
 
         # 2) layout: axes, labels, scales, legend, grid
         # Titles
@@ -1124,14 +1122,14 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
                 showgrid=False, zeroline=False, tickfont=dict(color=cols["tick"])
             ),
             legend=legend,
-            margin=dict(l=52, r=5, t=35, b=22),   # <-- smaller margins
+            margin=dict(l=52, r=5, t=35, b=22),
             paper_bgcolor=paper_bg,
             plot_bgcolor=plot_bg,
         )
 
         # Let Plotly auto-shrink margins to fit ticks/titles
-        fig.update_xaxes(automargin=True, title_standoff=4, ticks="outside", ticklen=6)
-        fig.update_yaxes(automargin=True, title_standoff=6, ticks="outside", ticklen=6)
+        fig.update_xaxes(automargin=True, title_standoff=4, ticks="outside", ticklen=10)
+        fig.update_yaxes(automargin=True, title_standoff=6, ticks="outside", ticklen=10)
 
 
         # 3) limits (auto or manual)
@@ -1151,12 +1149,29 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
                 ymin, ymax = self.axes_limits[Y1_AXIS]
             else:
                 ymin, ymax = self.y1_min, self.y1_max
-                if getattr(self, "y1log", False) and ymin is not None and ymin <= 0:
-                    ymin = max(self.y1min_pos, 1e-6)
+                if getattr(self, "y1log", False):
+                    if ymin is not None and ymin <= 0:
+                        ymin = max(self.y1min_pos, 1e-6)
+                    if ymax is not None and ymin == ymax:
+                        ymin *= 0.9
+                        ymax *= 1.1
+
             if None not in (ymin, ymax):
-                fig.update_yaxes(range=[ymin, ymax], matches=None)
+                if getattr(self, "y1log", False):
+                    fig.update_yaxes(
+                        type="log",
+                        range=[np.log10(ymin), np.log10(ymax)],
+                        matches=None
+                    )
+                else:
+                    fig.update_yaxes(
+                        type="linear",
+                        range=[ymin, ymax],
+                        matches=None
+                    )
         else:
             fig.update_yaxes(showticklabels=False)
+
 
         # Y2
         if getattr(self, "using_y2", True):
@@ -1164,20 +1179,50 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
                 ymin2, ymax2 = self.axes_limits[Y2_AXIS]
             else:
                 ymin2, ymax2 = self.y2_min, self.y2_max
-                if getattr(self, "y2log", False) and ymin2 is not None and ymin2 <= 0:
-                    ymin2 = max(self.y2min_pos, 1e-6)
+                if getattr(self, "y2log", False):
+                    if ymin2 is not None and ymin2 <= 0:
+                        ymin2 = max(self.y2min_pos, 1e-6)
+                    if ymax2 is not None and ymin2 == ymax2:
+                        ymin2 *= 0.9
+                        ymax2 *= 1.1
+
             if None not in (ymin2, ymax2):
-                fig.update_layout(yaxis2=dict(range=[ymin2, ymax2], overlaying="y", side="right"))
+                if getattr(self, "y2log", False):
+                    fig.update_layout(
+                        yaxis2=dict(
+                            type="log",
+                            range=[np.log10(ymin2), np.log10(ymax2)],
+                            overlaying="y",
+                            side="right"
+                        )
+                    )
+                else:
+                    fig.update_layout(
+                        yaxis2=dict(
+                            type="linear",
+                            range=[ymin2, ymax2],
+                            overlaying="y",
+                            side="right"
+                        )
+                    )
         else:
-            # hide y2 completely
             fig.update_layout(yaxis2=dict(visible=False))
 
-        # 4) markers (they already add shapes/annotations to canvas object)
+        print("y1log flag:", getattr(self, "y1log", False))
+
+
+        # 4) markers 
         # draw any attached markers
         for m in self.markers.values():
             if not m.isAttached():
                 m.attach(self)
             m.draw()
+
+        if getattr(self, "y1log", False):
+            fig.update_yaxes(type="log")
+        if getattr(self, "y2log", False):
+            fig.update_layout(yaxis2=dict(type="log", overlaying="y", side="right"))
+
 
         # 5) render
         self._canvas.render(fig)
