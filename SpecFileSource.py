@@ -539,11 +539,19 @@ class SpecFileSource(DataSource1D):
     
             scanobj = Scan(scanmeta['command'])
             self.setScanObject(scanobj)
-    
-            if data.any():
-                if len(labels) > 0:
-                    scanmeta['xColumn'] = labels[0]
-                    scanmeta['yColumns'] = [labels[-1], ]
+
+            # select which values to plot
+            if data.any() and labels:
+                xcol = labels[0]
+                scanmeta['xColumn'] = xcol
+
+                # all detector columns 
+                ycols = [lbl for lbl in labels if "det" in lbl.lower()]
+                if not ycols:
+                    ycols = [labels[-1]]
+
+                scanmeta['yColumns'] = ycols
+
     
             scanmeta.update(scan.getMeta())
     
