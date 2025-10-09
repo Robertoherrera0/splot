@@ -448,6 +448,7 @@ class SpecFileSource(DataSource1D):
             log.log(2, traceback.format_exc())
 
         # --- plot all selected scans (overlay)
+        # --- plot all selected scans (overlay)
         for scanno in selected_indices:
             try:
                 scan = self.sf[scanno]
@@ -459,10 +460,23 @@ class SpecFileSource(DataSource1D):
                 if not data.any() or len(labels) < 2:
                     continue
 
+                # X column is always the first
                 x = data[:, 0]
-                y = data[:, -1]
 
-                curve_name = f"scan{num}_{labels[-1]}"
+                # Match the same detector logic as selectScan()
+                det_labels = [lbl for lbl in labels if "det" in lbl.lower()]
+                if not det_labels:
+                    det_labels = [lbl for lbl in labels if "count" in lbl.lower()]
+                if not det_labels:
+                    det_labels = [lbl for lbl in labels if "mon" not in lbl.lower() and "sec" not in lbl.lower()]
+                if not det_labels:
+                    det_labels = [labels[-1]]
+
+                y_label = det_labels[0]
+                y_index = labels.index(y_label)
+                y = data[:, y_index]
+
+                curve_name = f"scan{num}_{y_label}"
                 self.plot.addCurve(curve_name)
                 curve = self.plot.curves[curve_name]
 
@@ -476,7 +490,7 @@ class SpecFileSource(DataSource1D):
                 import traceback
                 log.log(2, f"Error overlaying scan {scanno}: {e}")
                 log.log(2, traceback.format_exc())
-
+                
         # Force redraw
         self.plot.queue_replot()
 
