@@ -1,0 +1,92 @@
+
+            <!doctype html>
+            <html>
+            <head>
+            <meta charset="utf-8"/>
+            <script src="file:///usr/local/lib/spec.d/splot/plotly.min.js"></script>
+            <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+            <style>
+            html,body{height:100%;width:100%;margin:0;background:transparent;}
+            #plot{height:100%;width:100%;background:transparent;}
+
+            /* Hover-to-show modebar */
+            #plot .modebar{
+            opacity:0;
+            pointer-events:none;
+            transition:opacity .12s ease;
+            top:8px !important;
+            right:8px !important;
+            background:rgba(255,255,255,0.65);
+            border-radius:6px;
+            padding:2px;
+            }
+            #plot:hover .modebar,
+            #plot.modebar-show .modebar{
+            opacity:1;
+            pointer-events:auto;
+            }
+            #plot .modebar-btn{ opacity:0.85; }
+            #plot .modebar-btn:hover{opacity:1;}
+            </style>
+            </head>
+            <body>
+            <div id="plot"></div>
+            <script>
+            // Define renderFigure first so Python can call it at any time
+            window.renderFigure = function(figJSON, cfgJSON) {
+            try {
+                const fig = JSON.parse(figJSON);
+                const cfg = JSON.parse(cfgJSON);
+                const plot = document.getElementById('plot');
+                if (plot && plot.removeAllListeners) plot.removeAllListeners();
+
+                Plotly.react('plot', fig.data, fig.layout, cfg).then(() => {
+                const paper  = (fig.layout && fig.layout.paper_bgcolor) || 'transparent';
+                const plotbg = (fig.layout && fig.layout.plot_bgcolor)  || 'transparent';
+                document.documentElement.style.background = paper;
+                document.body.style.background = paper;
+                const applyBg = () => {
+                    const rects = plot.querySelectorAll('.bglayer rect.bg');
+                    rects.forEach(r => {
+                    r.setAttribute('fill', plotbg);
+                    r.setAttribute('stroke', 'rgba(0,0,0,0.18)');
+                    r.setAttribute('stroke-width', '1');
+                    });
+                };
+                requestAnimationFrame(applyBg);
+                plot.on('plotly_afterplot', applyBg);
+                window.addEventListener('resize', applyBg, { passive: true });
+                });
+
+                function xLabel(f) {
+                return f?.layout?.xaxis?.title?.text || '';
+                }
+
+                plot.on('plotly_click', (e) => {
+                if (!window.qt_bridge || !e?.points?.length) return;
+                const x = parseFloat(e.points[0].x);
+                if (!Number.isNaN(x)) window.qt_bridge.emitPointSelected(xLabel(fig), x);
+                });
+
+                plot.on('plotly_selected', (e) => {
+                if (!window.qt_bridge || !e?.range?.x) return;
+                const [x0, x1] = e.range.x.map(parseFloat);
+                if (!Number.isNaN(x0) && !Number.isNaN(x1))
+                    window.qt_bridge.emitRegionSelected(xLabel(fig), x0, x1);
+                });
+
+                console.log('renderFigure: done');
+            } catch (err) {
+                console.error('renderFigure error:', err);
+            }
+            };
+
+            window.qt_ready = false;  // new global flag
+            new QWebChannel(qt.webChannelTransport, (channel) => {
+                window.qt_bridge = channel.objects.qt_bridge || null;
+                window.qt_ready = true;
+                console.log('qt webchannel ready (flag set)');
+            });
+            </script>
+            </body>
+            </html> 

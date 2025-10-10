@@ -1,6 +1,5 @@
-# spec_plot_plotly.py
+# SpecPlotPlotly.py
 # Qt + Plotly replacement for SpecPlotMatplotlib
-# Requires: PySide6 (Qt WebEngine + WebChannel), plotly
 # Note: Loads Plotly from CDN. If you need offline, swap CDN for a local copy.
 
 
@@ -20,7 +19,7 @@ from PySide6.QtWebChannel import QWebChannel
 
 import plotly.graph_objects as go
 
-# Your existing infrastructure:
+# Splot existing infrastructure:
 from SpecPlotBaseClass import SpecPlotBaseClass, SpecPlotCurve, SpecPlotMarker
 from Constants import *  # expects X_AXIS, Y1_AXIS, Y2_AXIS, etc.
 
@@ -85,7 +84,7 @@ class _PlotlyCanvas:
             ],
         )
 
-
+        self._js_ready = False
         self._ready = False
         self._pending = None
 
@@ -93,159 +92,155 @@ class _PlotlyCanvas:
         self.web.loadFinished.connect(self._on_load_finished)
         self._init_html()
 
-        # poke periodically until JS side is ready
-        QTimer.singleShot(50, self._flush_if_ready)
 
     def _on_load_finished(self, ok: bool):
         print(f"[PLOT] loadFinished ok={ok}")
-        self._ready = True
-        self._flush_if_ready()
-
-    def _flush_if_ready(self):
-        """If renderFigure exists and we have a pending payload, push it.
-        Safe against re-entrancy / multiple callbacks."""
-        if not self._pending:
-            # still useful to probe JS side
-            self.web.page().runJavaScript("typeof window.renderFigure === 'function'", lambda *_: None)
+        self._ready = ok
+        if not ok:
             return
 
-        def _cb(has_fn):
-            # another run may have flushed while we waited
-            payload = self._pending
-            if not payload:
-                return
-            if has_fn:
-                figJSON, cfgJSON = payload
-                # clear after we've copied the payload
-                self._pending = None
-                self.web.page().runJavaScript(
-                    f"window.renderFigure({json.dumps(figJSON)}, {json.dumps(cfgJSON)})"
-                )
+        # Check for JS readiness flag until true
+        def _check_js_flag(val):
+            self._js_ready = bool(val)
+            if self._js_ready:
+                print("[PLOT] JS ready flag detected")
+                self._flush_if_ready()
             else:
-                # try again shortly
-                QTimer.singleShot(80, self._flush_if_ready)
+                QTimer.singleShot(80, self._verify_js_ready)
 
-        self.web.page().runJavaScript("typeof window.renderFigure === 'function'", _cb)
+        self._verify_js_ready = lambda: self.web.page().runJavaScript(
+            "window.qt_ready === true", _check_js_flag
+        )
+
+        # Start first probe
+        self._verify_js_ready()
+
+
+    def _flush_if_ready(self):
+        """Flush queued figure only when JS and page are both ready."""
+        if not self._pending:
+            return
+
+        if not (getattr(self, "_ready", False) and getattr(self, "_js_ready", False)):
+            QTimer.singleShot(80, self._flush_if_ready)
+            return
+
+        figJSON, cfgJSON = self._pending
+        self._pending = None
+        self.web.page().runJavaScript(
+            f"window.renderFigure({json.dumps(figJSON)}, {json.dumps(cfgJSON)})"
+        )
+
 
     def _init_html(self):
-        # Keep a temp dir alive for the life of the view
-        self._tmpdir = pathlib.Path(tempfile.mkdtemp(prefix="splot_plotly_"))
-
-        # Prefer a bundled file if you ship one alongside this module:
+        """
+        Initialize the embedded Plotly HTML document using a permanent, local
+        copy of plotly.min.js.  This avoids creating temporary directories and
+        guarantees consistent offline load times across sessions.
+        """
+        # --- Local static Plotly JS (no temp copies, no CDN) ---
         bundle_path = pathlib.Path(__file__).with_name("plotly.min.js")
-        try:
-            if bundle_path.exists():
-                js_text = bundle_path.read_text(encoding="utf-8")
-                print("[PLOT] Using bundled plotly.min.js")
-            else:
-                # Last resort: generate from plotly (still offline)
-                from plotly.offline import get_plotlyjs
-                js_text = get_plotlyjs()
-                print("[PLOT] Using plotly.offline.get_plotlyjs() output")
-            (self._tmpdir / "plotly.min.js").write_text(js_text, encoding="utf-8")
-        except Exception as e:
-            print(f"[PLOT] Could not materialize plotly.min.js: {e}")
-        plotly_tag = '<script src="plotly.min.js"></script>'
+        if not bundle_path.exists():
+            raise FileNotFoundError(f"plotly.min.js not found at {bundle_path}")
+        plotly_tag = f'<script src="file://{bundle_path}"></script>'
+        print(f"[PLOT] Using local Plotly JS: {bundle_path}")
 
-        html = f"""<!doctype html>
-    <html>
-    <head>
-    <meta charset="utf-8"/>
-    {plotly_tag}
-    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
-    <style>
-    html,body{{height:100%;width:100%;margin:0;background:transparent;}}
-    #plot{{height:100%;width:100%;background:transparent;}}
+        # --- HTML Template ---
+        html = f"""
+            <!doctype html>
+            <html>
+            <head>
+            <meta charset="utf-8"/>
+            {plotly_tag}
+            <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+            <style>
+            html,body{{height:100%;width:100%;margin:0;background:transparent;}}
+            #plot{{height:100%;width:100%;background:transparent;}}
 
-    /* Hover-to-show modebar */
-    #plot .modebar{{
-    opacity:0;
-    pointer-events:none;            /* don’t intercept clicks while hidden */
-    transition:opacity .12s ease;
-    top:8px !important;
-    right:8px !important;
-    background:rgba(255,255,255,0.65);
-    border-radius:6px;
-    padding:2px;
-    }}
-    #plot:hover .modebar,
-    #plot.modebar-show .modebar{{     /* programmatic “flash” (below) */
-    opacity:1;
-    pointer-events:auto;
-    }}
+            /* Hover-to-show modebar */
+            #plot .modebar{{
+            opacity:0;
+            pointer-events:none;
+            transition:opacity .12s ease;
+            top:8px !important;
+            right:8px !important;
+            background:rgba(255,255,255,0.65);
+            border-radius:6px;
+            padding:2px;
+            }}
+            #plot:hover .modebar,
+            #plot.modebar-show .modebar{{
+            opacity:1;
+            pointer-events:auto;
+            }}
+            #plot .modebar-btn{{ opacity:0.85; }}
+            #plot .modebar-btn:hover{{opacity:1;}}
+            </style>
+            </head>
+            <body>
+            <div id="plot"></div>
+            <script>
+            // Define renderFigure first so Python can call it at any time
+            window.renderFigure = function(figJSON, cfgJSON) {{
+            try {{
+                const fig = JSON.parse(figJSON);
+                const cfg = JSON.parse(cfgJSON);
+                const plot = document.getElementById('plot');
+                if (plot && plot.removeAllListeners) plot.removeAllListeners();
 
-    #plot .modebar-btn{{ opacity:0.85; }}
-    #plot .modebar-btn:hover{{opacity:1; }}
-    </style>
-    </head>
-    <body>
-    <div id="plot"></div>
-    <script>
-    // Define renderFigure first so Python can call it at any time
-    window.renderFigure = function(figJSON, cfgJSON) {{
-    try {{
-        const fig = JSON.parse(figJSON);
-        const cfg = JSON.parse(cfgJSON);
+                Plotly.react('plot', fig.data, fig.layout, cfg).then(() => {{
+                const paper  = (fig.layout && fig.layout.paper_bgcolor) || 'transparent';
+                const plotbg = (fig.layout && fig.layout.plot_bgcolor)  || 'transparent';
+                document.documentElement.style.background = paper;
+                document.body.style.background = paper;
+                const applyBg = () => {{
+                    const rects = plot.querySelectorAll('.bglayer rect.bg');
+                    rects.forEach(r => {{
+                    r.setAttribute('fill', plotbg);
+                    r.setAttribute('stroke', 'rgba(0,0,0,0.18)');
+                    r.setAttribute('stroke-width', '1');
+                    }});
+                }};
+                requestAnimationFrame(applyBg);
+                plot.on('plotly_afterplot', applyBg);
+                window.addEventListener('resize', applyBg, {{ passive: true }});
+                }});
 
-        const plot = document.getElementById('plot');
-        if (plot && plot.removeAllListeners) plot.removeAllListeners();
+                function xLabel(f) {{
+                return f?.layout?.xaxis?.title?.text || '';
+                }}
 
-        // Render/update the figure, then tint only the axes area
-        Plotly.react('plot', fig.data, fig.layout, cfg).then(() => {{
-        const paper  = (fig.layout && fig.layout.paper_bgcolor) || 'transparent';
-        const plotbg = (fig.layout && fig.layout.plot_bgcolor)  || 'transparent';
+                plot.on('plotly_click', (e) => {{
+                if (!window.qt_bridge || !e?.points?.length) return;
+                const x = parseFloat(e.points[0].x);
+                if (!Number.isNaN(x)) window.qt_bridge.emitPointSelected(xLabel(fig), x);
+                }});
 
-        // keep the outer page neutral; don't tint #plot itself
-        document.documentElement.style.background = paper;
-        document.body.style.background = paper;
+                plot.on('plotly_selected', (e) => {{
+                if (!window.qt_bridge || !e?.range?.x) return;
+                const [x0, x1] = e.range.x.map(parseFloat);
+                if (!Number.isNaN(x0) && !Number.isNaN(x1))
+                    window.qt_bridge.emitRegionSelected(xLabel(fig), x0, x1);
+                }});
 
-        const applyBg = () => {{
-            // For each subplot, set the background rect fill + a subtle frame
-            const rects = plot.querySelectorAll('.bglayer rect.bg');
-            rects.forEach(r => {{
-            r.setAttribute('fill', plotbg);
-            r.setAttribute('stroke', 'rgba(0,0,0,0.18)');
-            r.setAttribute('stroke-width', '1');
+                console.log('renderFigure: done');
+            }} catch (err) {{
+                console.error('renderFigure error:', err);
+            }}
+            }};
+
+            window.qt_ready = false;  // new global flag
+            new QWebChannel(qt.webChannelTransport, (channel) => {{
+                window.qt_bridge = channel.objects.qt_bridge || null;
+                window.qt_ready = true;
+                console.log('qt webchannel ready (flag set)');
             }});
-        }};
-        // run now and on redraw/resize
-        requestAnimationFrame(applyBg);
-        plot.on('plotly_afterplot', applyBg);
-        window.addEventListener('resize', applyBg, {{ passive: true }});
-        }});
+            </script>
+            </body>
+            </html> """
 
-        function xLabel(f) {{
-        return f?.layout?.xaxis?.title?.text || '';
-        }}
-
-        plot.on('plotly_click', (e) => {{
-        if (!window.qt_bridge || !e?.points?.length) return;
-        const x = parseFloat(e.points[0].x);
-        if (!Number.isNaN(x)) window.qt_bridge.emitPointSelected(xLabel(fig), x);
-        }});
-        plot.on('plotly_selected', (e) => {{
-        if (!window.qt_bridge || !e?.range?.x) return;
-        const [x0, x1] = e.range.x.map(parseFloat);
-        if (!Number.isNaN(x0) && !Number.isNaN(x1))
-            window.qt_bridge.emitRegionSelected(xLabel(fig), x0, x1);
-        }});
-
-        console.log('renderFigure: done');
-    }} catch (err) {{
-        console.error('renderFigure error:', err);
-    }}
-    }};
-
-    // WebChannel after defining renderFigure
-    new QWebChannel(qt.webChannelTransport, (channel) => {{
-    window.qt_bridge = channel.objects.qt_bridge || null;
-    console.log('qt webchannel ready');
-    }});
-    </script>
-    </body>
-    </html>"""
-
-        index_path = self._tmpdir / "index.html"
+        # Write the HTML to a single stable file (no temp dirs)
+        index_path = pathlib.Path(__file__).with_name("plotly_index.html")
         index_path.write_text(html, encoding="utf-8")
         self.web.load(QUrl.fromLocalFile(str(index_path)))
 
@@ -282,12 +277,23 @@ class _PlotlyCanvas:
         figJSON = fig.to_json()
         cfgJSON = json.dumps(config if config is not None else self._config)
 
-        # store latest payload; flush when JS is ready
+        # store latest payload; flush only when both page and JS are ready
         self._pending = (figJSON, cfgJSON)
-        if not self._ready:
-            print("[PLOT] page not ready; queued payload")
+
+        # Wait until both layers are ready before pushing the figure
+        if not (getattr(self, "_ready", False) and getattr(self, "_js_ready", False)):
+            # Only print once per figure update batch
+            if not hasattr(self, "_warned_not_ready") or not self._warned_not_ready:
+                print("[PLOT] waiting for page/JS ready…")
+                self._warned_not_ready = True
+            # Schedule a check in 80 ms
+            QTimer.singleShot(80, self._flush_if_ready)
             return
+
+        # Reset warning state and flush immediately
+        self._warned_not_ready = False
         self._flush_if_ready()
+
 
 # ------------------------- Curve (trace) wrapper -------------------------
 
@@ -1231,8 +1237,19 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
     
 
     def queue_replot(self):
-        # Keep it simple: coalesce rapid updates
-        QTimer.singleShot(0, self.replot)
+        """Coalesce rapid replot calls (~10 Hz max)."""
+        if getattr(self, "_replot_pending", False):
+            return
+        self._replot_pending = True
+        QTimer.singleShot(200, self._commit_replot)
+
+    def _commit_replot(self):
+        from datetime import datetime
+        print(f"[PLOT] replot commit at {datetime.now().strftime('%H:%M:%S.%f')}")
+
+
+        self._replot_pending = False
+        self.replot()
 
     # ---- Printing / saving ----
     def saveAsImage(self, filename: str, title: str = ""):
