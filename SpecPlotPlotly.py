@@ -1241,7 +1241,7 @@ class SpecPlotPlotly(QWidget, SpecPlotBaseClass):
         if getattr(self, "_replot_pending", False):
             return
         self._replot_pending = True
-        QTimer.singleShot(200, self._commit_replot)
+        QTimer.singleShot(40, self._commit_replot)
 
     def _commit_replot(self):
         from datetime import datetime

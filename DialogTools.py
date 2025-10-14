@@ -67,140 +67,39 @@ def getSaveFile(parent=None, prompt=None, filetypes="", prefs=None):
             prefs.save()
 
     return filename
+def getPrinter(prefs=None, mute=False, parent=None, filename=None):
+    """
+    Safe printer dialog for both legacy (matplotlib) and modern (Plotly) backends.
+    Under Wayland, this will never block or crash.
+    """
+    import os
+    from PySide6.QtPrintSupport import QPrinter, QPrintDialog, QPageLayout, QPageSize, QAbstractPrintDialog
+    from PySide6.QtWidgets import QFileDialog, QColorDialog, QDialog
 
-def getPrinter(prefs=None,mute=False,parent=None, filename=None):
+    # --- If running Plotly backend (non-legacy), skip the Qt printer entirely ---
+    if os.environ.get("GANS_BACKEND", "").lower() == "plotly":
+        print("[INFO] Plotly backend detected: skipping legacy QPrintDialog.")
+        return None
+
     printer = QPrinter()
 
-    try:
-        landscape = QPrinter.Landscape
-        grayscale = QPrinter.GrayScale
-    except AttributeError:
-        landscape = QPageLayout.Orientation.Landscape
-        grayscale = QPrinter.ColorMode.GrayScale
-
-    try:
-        custom = QPrinter.Custom
-        letter = QPrinter.Letter
-    except AttributeError:
-        try:
-            custom = QPageSize.Custom
-            letter = QPageSize.Letter
-        except AttributeError:
-            custom = QPageSize.PageSizeId.Custom
-            letter = QPageSize.PageSizeId.Letter
-    
-
-    if not prefs:
-        prefs = Preferences()
-
-    if 'printer_name' in prefs.keys():
-        printer.setPrinterName(prefs['printer_name'])
-
-    printer_orientation = prefs.getValue('printer_orientation', None)
-
-    if printer_orientation is not None:
-        if qt_variant() == 'PySide':
-            printer_orientation = QPrinter.Orientation.values.get(printer_orientation, landscape)
-        else:  # qt_variant PyQt4 or PyQt5 or PySide2
-            try:
-                printer_orientation = int(printer_orientation)  
-            except:
-                printer_orientation = landscape
-    else:
-        printer_orientation = landscape
-
-    try:
-        printer.setOrientation(printer_orientation)
-    except AttributeError:
-        printer.setPageOrientation(printer_orientation)
-
-    outfilename = prefs.getValue('printer_outputfilename')
-    if outfilename:
-        printer.setOutputFileName(outfilename)
-
-    psize = prefs.getValue('printer_papersize', None)
-    if psize is not None:
-        if qt_variant() == 'PySide':
-            psize = QPrinter.PageSize.values.get(psize, None)
-        else:  # qt_variant PyQt4 or PyQt5 or PySide2
-            try:
-                psize = int(psize)  
-            except:
-                psize = None
-
-    if psize is not None:
-        # Protect from buggy "Custom" support (=30)
-        if psize == custom:
-            psize = letter  # Letter
-        printer.setPageSize(psize)
-
-    pcolor = prefs.getValue('printer_colormode',None)
-
-    if pcolor is not None: 
-        if qt_variant() == 'PySide':
-            pcolor = QPrinter.ColorMode.values.get(pcolor, QPrinter.GrayScale)
-        else:  # qt_variant PyQt4 or PyQt5 or PySide2
-            try:
-                pcolor = int(pcolor)
-            except:
-                pcolor = grayscale
-    else:
-        pcolor = grayscale
-
-    printer.setColorMode(pcolor)
-
-    if not mute:
-        printDialog = QPrintDialog(printer,parent)
- 
-        try:
-            ret = printDialog.exec_() 
-            accepted = QDialog.Accepted
-        except AttributeError:
-            exec_ = getattr(printDialog, "exec")
-            ret = exec_()
-            accepted = QDialog.DialogCode.Accepted
-             
-        if ret != accepted:
-            log.log(2, " not accepted")
+    # Fallback for systems without portals (Wayland or headless)
+    if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
+        print("[INFO] Wayland session detected: using internal non-native print dialog.")
+        dialog = QPrintDialog(printer, parent)
+        dialog.setOption(QAbstractPrintDialog.DontUseNativeDialog, True)
+        dialog.setWindowModality(Qt.ApplicationModal)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
+        return printer
 
-        log.log(2, "saving printing preferences")
-
-        colormode = printer.colorMode()
-        try:
-            psize = printer.paperSize()
-            orientation = printer.orientation()
-        except AttributeError:
-            psize = printer.pageLayout().pageSize().id()
-            orientation = printer.pageLayout().orientation()
-
-        if psize == custom:
-            psize = letter
-
-        if qt_variant() in ['PySide', 'PySide6', 'PyQt6']:
-            prefs['printer_orientation'] = orientation.name
-            prefs['printer_papersize'] = psize.name
-            prefs['printer_colormode'] = colormode.name
-        else:
-            prefs['printer_orientation'] = orientation
-            prefs['printer_papersize'] = psize
-            prefs['printer_colormode'] = colormode
-        try:
-            prefs['printer_outputfilename'] = printer.outputFileName()
-        except Exception:
-            pass
-
-    else:
-        if filename:
-            if str(filename).endswith(".pdf"):
-                printer.setOutputFileName(filename)
-            else:
-                printer.setOutputFileName(filename + ".pdf")
-        elif not printer.isValid():
-            log.log(3,"invalid printer %s" % prefs['printer_name'])
-            return None
-
+    # Normal path for X11 or full desktops
+    dialog = QPrintDialog(printer, parent)
+    dialog.setWindowModality(Qt.ApplicationModal)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
     return printer
+
 
 
 if __name__ == '__main__':

@@ -141,7 +141,14 @@ width: 12px; height: 5px;}"""
         self.clicked.connect(self.openDialog)
 
     def openDialog(self,flag=True):
-        color = QColorDialog.getColor(QColor(self.color), self)
+        dialog = QColorDialog(self)
+        dialog.setOption(QColorDialog.DontUseNativeDialog, True)
+        dialog.setCurrentColor(QColor(self.color))
+        if dialog.exec():
+            color = dialog.currentColor()
+            self.setColor(color.name())
+            self.colorChanged.emit(color.name())
+
         if color.isValid():
             self.setColor(color.name())
             self.colorChanged.emit(color.name())

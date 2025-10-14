@@ -736,13 +736,26 @@ class SpecPlotWidget(QWidget):
         return  self.plotHeader.getTitle()
 
     def _handle_print(self):
+        """
+        Always use Plotly's export — never invoke Qt's native printer.
+        This prevents Wayland freezes and simplifies the logic.
+        """
         title = self.plotHeader.getTitle()
-        if hasattr(self.plot, "printOrExport"):
-            # Plotly backend
-            self.plot.printOrExport(self)
-        else:
-            # Fallback: legacy matplotlib backend
-            self.printPlot(title)
+
+        try:
+            if hasattr(self.plot, "printOrExport"):
+                # Plotly backend (always)
+                self.plot.printOrExport(self)
+            else:
+                print("[WARN] No printOrExport() found on plot backend.")
+        except Exception as e:
+            from PySide6.QtWidgets import QMessageBox
+            import traceback
+            QMessageBox.warning(
+                self,
+                "Export Failed",
+                f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}",
+            )
 
     # BEGIN print plot
     def printPlot(self, mute=False, filename=None):
